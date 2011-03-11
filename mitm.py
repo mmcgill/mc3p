@@ -102,8 +102,11 @@ TYPE_SET_SLOT = 10
 TYPE_WINDOW_CLICK = 11
 TYPE_CHUNK = 12
 TYPE_MULTI_BLOCK_CHANGE = 13
+TYPE_ITEM_DETAILS = 14
+TYPE_EXPLOSION_RECORD = 15
 
 client_packet_spec = {
+    0x00: [],   # Keep-alive packet
     0x01: [('proto_version',TYPE_INT),
            ('username',TYPE_STRING),
            ('password',TYPE_STRING),
@@ -111,9 +114,14 @@ client_packet_spec = {
            ('dimension',TYPE_BYTE)],
     0x02: [('username',TYPE_STRING)],
     0x03: [('chat_msg',TYPE_STRING)],
+    0x05: [('eid',TYPE_INT),
+           ('slot',TYPE_SHORT),
+           ('item_id',TYPE_SHORT),
+           ('unknown',TYPE_SHORT)],
     0x07: [('eid',TYPE_INT),
            ('target_eid',TYPE_INT),
            ('left_click',TYPE_BOOL)],
+    0x09: [], # Respawnn packet
     0x0a: [('on_ground',TYPE_BOOL)],
     0x0b: [('x',TYPE_DOUBLE),
            ('y',TYPE_DOUBLE),
@@ -135,16 +143,71 @@ client_packet_spec = {
            ('y',TYPE_BYTE),
            ('z',TYPE_INT),
            ('face',TYPE_BYTE)],
+    0x0f: [('x',TYPE_INT),
+           ('y',TYPE_BYTE),
+           ('z',TYPE_INT),
+           ('dir',TYPE_BYTE),
+           ('id',TYPE_SHORT),
+           ('details',TYPE_ITEM_DETAILS)],
+    0x10: [('slot_id', TYPE_SHORT)],
     0x12: [('eid',TYPE_INT),
            ('animation',TYPE_BYTE)],
+    0x13: [('eid',TYPE_INT),
+           ('action', TYPE_BYTE)],
+    0x15: [('eid',TYPE_INT),
+           ('item',TYPE_SHORT),
+           ('count',TYPE_BYTE),
+           ('data',TYPE_SHORT),
+           ('x',TYPE_INT),
+           ('y',TYPE_INT),
+           ('z',TYPE_INT),
+           ('rotation',TYPE_BYTE),
+           ('pitch',TYPE_BYTE),
+           ('roll',TYPE_BYTE)],
     0x1b: [('d1', TYPE_FLOAT),
            ('d2', TYPE_FLOAT),
            ('d3', TYPE_FLOAT),
            ('d4', TYPE_FLOAT),
            ('d5', TYPE_BOOL),
-           ('d6', TYPE_BOOL)]}
+           ('d6', TYPE_BOOL)],
+    0x1c: [('eid',TYPE_INT),
+           ('vel_x',TYPE_SHORT),
+           ('vel_y',TYPE_SHORT),
+           ('vel_z',TYPE_SHORT)],
+    0x27: [('eid',TYPE_INT),
+           ('vehicle_id',TYPE_INT)],
+    0x28: [('eid',TYPE_INT),
+           ('metadata',TYPE_METADATA)],
+    0x34: [('chunk_x',TYPE_INT),
+           ('chunk_z',TYPE_INT),
+           ('array_lengths',TYPE_SHORT),
+           ('arrays',TYPE_MULTI_BLOCK_CHANGE)],
+    0x35: [('x',TYPE_INT),
+           ('y',TYPE_BYTE),
+           ('z',TYPE_INT),
+           ('block_type',TYPE_BYTE),
+           ('block_metadata',TYPE_BYTE)],
+    0x65: [('window_id', TYPE_BYTE)],
+    0x66: [('window_id', TYPE_BYTE),
+           ('slot', TYPE_SHORT),
+           ('is_right_click', TYPE_BOOL),
+           ('action_num', TYPE_SHORT),
+           ('item_id', TYPE_SHORT),
+           ('item_details', TYPE_ITEM_DETAILS)],
+    0x6a: [('window_id', TYPE_BYTE),
+           ('action_num', TYPE_SHORT),
+           ('accepted', TYPE_BOOL)],
+    0x82: [('x', TYPE_INT),
+           ('y', TYPE_SHORT),
+           ('z', TYPE_INT),
+           ('text1', TYPE_STRING),
+           ('text2', TYPE_STRING),
+           ('text3', TYPE_STRING),
+           ('text4', TYPE_STRING)],
+    0xff: [('reason', TYPE_STRING)]}
 
 server_packet_spec = {
+    0x00: [],
     0x01: [('eid',TYPE_INT),
            ('reserved',TYPE_STRING),
            ('reserved',TYPE_STRING),
@@ -153,10 +216,19 @@ server_packet_spec = {
     0x02: [('hash',TYPE_STRING)],
     0x03: [('chat_msg',TYPE_STRING)],
     0x04: [('time',TYPE_LONG)],
+    0x05: [('eid', TYPE_INT),
+           ('slot_id', TYPE_SHORT),
+           ('item_id', TYPE_SHORT),
+           ('unknown', TYPE_SHORT)],
     0x06: [('x',TYPE_INT),
            ('y',TYPE_INT),
            ('z',TYPE_INT)],
     0x08: [('health',TYPE_SHORT)],
+    0x0b: [('x',TYPE_DOUBLE),
+           ('y',TYPE_DOUBLE),
+           ('stance',TYPE_DOUBLE),
+           ('z',TYPE_DOUBLE),
+           ('on_ground',TYPE_BOOL)],
     0x0d: [('x',TYPE_DOUBLE),
            ('stance',TYPE_DOUBLE),
            ('y',TYPE_DOUBLE),
@@ -164,6 +236,35 @@ server_packet_spec = {
            ('yaw',TYPE_FLOAT),
            ('pitch',TYPE_FLOAT),
            ('on_ground',TYPE_BOOL)],
+    0x0e: [('status',TYPE_BYTE),
+           ('x',TYPE_INT),
+           ('y',TYPE_BYTE),
+           ('z',TYPE_INT),
+           ('face',TYPE_BYTE)],
+    0x0f: [('x',TYPE_INT),
+           ('y',TYPE_BYTE),
+           ('z',TYPE_INT),
+           ('dir',TYPE_BYTE),
+           ('id',TYPE_SHORT),
+           ('details',TYPE_ITEM_DETAILS)],
+    0x10: [('slot_id', TYPE_SHORT)],
+    0x11: [('eid', TYPE_INT),
+           ('unknown', TYPE_BYTE),
+           ('x', TYPE_INT),
+           ('y', TYPE_BYTE),
+           ('z', TYPE_INT)],
+    0x12: [('eid',TYPE_INT),
+           ('animation',TYPE_BYTE)],
+    0x13: [('eid',TYPE_INT),
+           ('action', TYPE_BYTE)],
+    0x14: [('eid', TYPE_INT),
+           ('name', TYPE_STRING),
+           ('x', TYPE_INT),
+           ('y', TYPE_INT),
+           ('z', TYPE_INT),
+           ('rotation', TYPE_BYTE),
+           ('pitch', TYPE_BYTE),
+           ('curr_item', TYPE_SHORT)],
     0x15: [('eid',TYPE_INT),
            ('item',TYPE_SHORT),
            ('count',TYPE_BYTE),
@@ -189,23 +290,47 @@ server_packet_spec = {
            ('yaw',TYPE_BYTE),
            ('pitch',TYPE_BYTE),
            ('metadata',TYPE_METADATA)],
+    0x19: [('eid', TYPE_INT),
+           ('title', TYPE_STRING),
+           ('x', TYPE_INT),
+           ('y', TYPE_INT),
+           ('z', TYPE_INT),
+           ('type', TYPE_INT)],
+    0x1b: [('d1', TYPE_FLOAT),
+           ('d2', TYPE_FLOAT),
+           ('d3', TYPE_FLOAT),
+           ('d4', TYPE_FLOAT),
+           ('d5', TYPE_BOOL),
+           ('d6', TYPE_BOOL)],
     0x1c: [('eid',TYPE_INT),
            ('vel_x',TYPE_SHORT),
            ('vel_y',TYPE_SHORT),
            ('vel_z',TYPE_SHORT)],
     0x1d: [('eid',TYPE_INT)],
+    0x1e: [('eid', TYPE_INT)],
     0x1f: [('eid',TYPE_INT),
            ('dx',TYPE_BYTE),
            ('dy',TYPE_BYTE),
            ('dz',TYPE_BYTE)],
+    0x20: [('eid', TYPE_INT),
+           ('yaw', TYPE_BYTE),
+           ('pitch', TYPE_BYTE)],
     0x21: [('eid',TYPE_INT),
            ('dx',TYPE_BYTE),
            ('dy',TYPE_BYTE),
            ('dz',TYPE_BYTE),
            ('yaw',TYPE_BYTE),
            ('pitch',TYPE_BYTE)],
+    0x22: [('eid', TYPE_INT),
+           ('x', TYPE_INT),
+           ('y', TYPE_INT),
+           ('z', TYPE_INT),
+           ('yaw', TYPE_BYTE),
+           ('pitch', TYPE_BYTE)],
     0x26: [('eid',TYPE_INT),
            ('status',TYPE_BYTE)],
+    0x27: [('eid', TYPE_INT),
+           ('vehicle_id', TYPE_INT)],
     0x28: [('eid',TYPE_INT),
            ('metadata',TYPE_METADATA)],
     0x32: [('x',TYPE_INT),
@@ -228,13 +353,43 @@ server_packet_spec = {
            ('z',TYPE_INT),
            ('block_type',TYPE_BYTE),
            ('block_metadata',TYPE_BYTE)],
+    0x36: [('x', TYPE_INT),
+           ('y', TYPE_SHORT),
+           ('z', TYPE_INT),
+           ('instrument_type', TYPE_BYTE),
+           ('pitch', TYPE_BYTE)],
+    0x3c: [('x', TYPE_DOUBLE),
+           ('y', TYPE_DOUBLE),
+           ('z', TYPE_DOUBLE),
+           ('unknown', TYPE_FLOAT),
+           ('count', TYPE_INT),
+           ('records', TYPE_EXPLOSION_RECORD)],
+    0x64: [('window_id', TYPE_BYTE),
+           ('inv_type', TYPE_BYTE),
+           ('window_title', TYPE_STRING),
+           ('num_slots', TYPE_BYTE)],
+    0x65: [('window_id', TYPE_BYTE)],
     0x67: [('window_id',TYPE_BYTE),
            ('slot',TYPE_SHORT),
            ('item_id',TYPE_SHORT),
            ('count_uses',TYPE_SET_SLOT)],
     0x68: [('window_id',TYPE_BYTE),
            ('count',TYPE_SHORT),
-           ('inventory',TYPE_INVENTORY)]}
+           ('inventory',TYPE_INVENTORY)],
+    0x69: [('window_id', TYPE_BYTE),
+           ('progress_bar',TYPE_SHORT),
+           ('value',TYPE_SHORT)],
+    0x6a: [('window_id', TYPE_BYTE),
+           ('action_num', TYPE_SHORT),
+           ('accepted', TYPE_BOOL)],
+    0x82: [('x', TYPE_INT),
+           ('y', TYPE_SHORT),
+           ('z', TYPE_INT),
+           ('text1', TYPE_STRING),
+           ('text2', TYPE_STRING),
+           ('text3', TYPE_STRING),
+           ('text4', TYPE_STRING)],
+    0xff: [('reason', TYPE_STRING)]}
 
 packet_spec = [ client_packet_spec, server_packet_spec ]
 
@@ -280,7 +435,7 @@ class mitm_parser(asyncore.dispatcher):
         try:
             packet={}
             # read Packet ID
-            pid = self.parse_byte()
+            pid = self.parse_unsigned_byte()
             spec = packet_spec[self.side]
             if not spec.has_key(pid):
                 raise UnsupportedPacketException(pid)
@@ -315,6 +470,10 @@ class mitm_parser(asyncore.dispatcher):
                     packet[name]=self.parse_chunk()
                 elif type == TYPE_MULTI_BLOCK_CHANGE:
                     packet[name]=self.parse_multi_block_change()
+                elif type == TYPE_ITEM_DETAILS:
+                    packet[name]=self.parse_item_details()
+                elif type == TYPE_EXPLOSION_RECORD:
+                    packet[name]=self.parse_explosion_record()
                 else:
                     raise "Unknown data type %d" % type
             packet['packet_bytes']=self.buf[:self.i]
@@ -327,6 +486,13 @@ class mitm_parser(asyncore.dispatcher):
         if (self.i+1 > len(self.buf)):
             raise PartialPacketException()
         byte = struct.unpack_from(">b",self.buf,self.i)[0]
+        self.i += 1
+        return byte
+
+    def parse_unsigned_byte(self):
+        if (self.i+1 > len(self.buf)):
+            raise PartialPacketException()
+        byte = struct.unpack_from(">B",self.buf,self.i)[0]
         self.i += 1
         return byte
 
@@ -455,6 +621,22 @@ class mitm_parser(asyncore.dispatcher):
         return {'coord_array': coord_array,
                 'type_array': type_array,
                 'metadata_array': metadata_array}
+
+    def parse_item_details(self):
+        self.i -= 2
+        id = self.parse_short()
+        if (id >= 0):
+            return {'count':self.parse_byte(),'uses':self.parse_short()}
+        else:
+            return None
+
+    def parse_explosion_record(self):
+        self.i -= 4
+        c = parse_int()
+        records = []
+        for j in xrange(0,c):
+            records.append( (parse_byte(),parse_byte(),parse_byte() ))
+        return records
 
 def sigint_handler(signum, stack):
     print "Received SIGINT, shutting down"
