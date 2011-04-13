@@ -4,6 +4,7 @@ import sys
 import signal
 import struct
 import logging
+from time import time
 
 import mcproto
 
@@ -30,7 +31,7 @@ class mitm_listener(asyncore.dispatcher):
             chan = mitm_channel(sock,self.dsthost,self.dstport)
         except Exception as e:
             print str(e)
-        
+
 
 class mitm_channel:
     """Handles a Minecraft client-server connection.
@@ -40,7 +41,8 @@ class mitm_channel:
         logging.info("creating mitm_channel from client to %s:%d" % (dsthost,dstport))
         self.mitm_client = mitm_parser(clientsock, mcproto.CLIENT_SIDE,
                                        self.handle_client_packet,
-                                       self.client_closed)
+                                       self.client_closed,
+                                       'Client parser')
         self.mitm_server = None
         try:
             serversock = socket.create_connection((dsthost,dstport))
@@ -49,7 +51,8 @@ class mitm_channel:
             raise
         self.mitm_server = mitm_parser(serversock, mcproto.SERVER_SIDE,
                                        self.handle_server_packet,
-                                       self.server_closed)
+                                       self.server_closed,
+                                       'Server parser')
         self.client_buf = ""
 
     def handle_client_packet(self,packet):
@@ -94,17 +97,27 @@ class mitm_parser(asyncore.dispatcher):
     """Parses a packet stream from a Minecraft client or server.
     """
 
-    def __init__(self, sock, side, packet_hdlr, close_hdlr):
+    def __init__(self, sock, side, packet_hdlr, close_hdlr,name='Parser'):
         asyncore.dispatcher.__init__(self,sock)
         self.side = side
         self.packet_hdlr = packet_hdlr
         self.close_hdlr = close_hdlr
         self.buf = ""
         self.i = 0
+        self.tot_bytes = 0
+        self.wasted_bytes = 0
+        self.last_report = 0
+        self.name = name
 
     def handle_read(self):
         """Read all available bytes, and process as many packets as possible.
         """
+        t = time()
+        if self.last_report + 5 < t and self.tot_bytes > 0:
+            self.last_report = t
+            logging.debug("%s: total/wasted bytes is %d/%d (%f wasted)" % (
+                 self.name, self.tot_bytes, self.wasted_bytes,
+                 100 * float(self.wasted_bytes) / self.tot_bytes))
         self.buf += self.recv(4092)
         try:
             packet = self.parse_packet()
@@ -177,7 +190,10 @@ class mitm_parser(asyncore.dispatcher):
             self.buf = self.buf[self.i:]
             return packet
         except PartialPacketException:
+            self.wasted_bytes += self.i
             return None
+        finally:
+            self.tot_bytes += self.i
 
     def parse_byte(self):
         if (self.i+1 > len(self.buf)):
@@ -220,7 +236,7 @@ class mitm_parser(asyncore.dispatcher):
         num = struct.unpack_from(">f",self.buf,self.i)[0]
         self.i += 4
         return num
-   
+
     def parse_double(self):
         if (self.i+8 > len(self.buf)):
             raise PartialPacketException()
@@ -248,7 +264,7 @@ class mitm_parser(asyncore.dispatcher):
             b=True
         self.i += 1
         return b
-    
+
     def parse_metadata(self):
         if (self.i+1 > len(self.buf)):
             raise PartialPacketException()
@@ -329,10 +345,10 @@ class mitm_parser(asyncore.dispatcher):
 
     def parse_explosion_record(self):
         self.i -= 4
-        c = parse_int()
+        c = self.parse_int()
         records = []
         for j in xrange(0,c):
-            records.append( (parse_byte(),parse_byte(),parse_byte() ))
+            records.append( (self.parse_byte(),self.parse_byte(),self.parse_byte() ))
         return records
 
 def sigint_handler(signum, stack):
