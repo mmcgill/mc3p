@@ -4,7 +4,7 @@ import sys
 import signal
 
 class echoer(asyncore.dispatcher):
-    
+
     def __init__(self,sock):
         asyncore.dispatcher.__init__(self,sock)
 
@@ -19,7 +19,7 @@ class echoer(asyncore.dispatcher):
         self.close()
 
 class echo_server(asyncore.dispatcher):
-    
+
     def __init__(self,port):
         asyncore.dispatcher.__init__(self)
         self.create_socket(socket.AF_INET,socket.SOCK_STREAM)
