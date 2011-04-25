@@ -108,6 +108,26 @@ class mitm_parser(asyncore.dispatcher):
         self.wasted_bytes = 0
         self.last_report = 0
         self.name = name
+        self._curry_parsing_functions()
+
+    def _curry_parsing_functions(self):
+        parsers = {}
+        parsers[mcproto.TYPE_BYTE] = self.parse_byte
+        parsers[mcproto.TYPE_SHORT] = self.parse_short
+        parsers[mcproto.TYPE_INT] = self.parse_int
+        parsers[mcproto.TYPE_LONG] = self.parse_long
+        parsers[mcproto.TYPE_FLOAT] = self.parse_float
+        parsers[mcproto.TYPE_DOUBLE] = self.parse_double
+        parsers[mcproto.TYPE_STRING] = self.parse_string
+        parsers[mcproto.TYPE_BOOL]  = self.parse_bool
+        parsers[mcproto.TYPE_METADATA]  = self.parse_metadata
+        parsers[mcproto.TYPE_INVENTORY] = self.parse_inventory
+        parsers[mcproto.TYPE_SET_SLOT] = self.parse_set_slot
+        parsers[mcproto.TYPE_CHUNK] = self.parse_chunk
+        parsers[mcproto.TYPE_MULTI_BLOCK_CHANGE] = self.parse_multi_block_change
+        parsers[mcproto.TYPE_ITEM_DETAILS] = self.parse_item_details
+        parsers[mcproto.TYPE_EXPLOSION_RECORD] = self.parse_explosion_record
+        self.parsers = parsers
 
     def handle_read(self):
         """Read all available bytes, and process as many packets as possible.
@@ -153,39 +173,10 @@ class mitm_parser(asyncore.dispatcher):
             packet['id'] = pid
             fmt = spec[pid]
             for name,type in fmt:
-                if type == mcproto.TYPE_BYTE:
-                    packet[name]=self.parse_byte()
-                elif type == mcproto.TYPE_SHORT:
-                    packet[name]=self.parse_short()
-                elif type == mcproto.TYPE_INT:
-                    packet[name]=self.parse_int()
-                elif type == mcproto.TYPE_LONG:
-                    packet[name]=self.parse_long()
-                elif type == mcproto.TYPE_FLOAT:
-                    packet[name]=self.parse_float()
-                elif type == mcproto.TYPE_DOUBLE:
-                    packet[name]=self.parse_double()
-                elif type == mcproto.TYPE_STRING:
-                    packet[name]=self.parse_string()
-                elif type == mcproto.TYPE_BOOL:
-                    packet[name]=self.parse_bool()
-                elif type == mcproto.TYPE_METADATA:
-                    packet[name]=self.parse_metadata()
-                elif type == mcproto.TYPE_INVENTORY:
-                    packet[name]=self.parse_inventory()
-                elif type == mcproto.TYPE_SET_SLOT:
-                    if packet['item_id'] != -1:
-                        packet[name]=self.parse_set_slot()
-                elif type == mcproto.TYPE_CHUNK:
-                    packet[name]=self.parse_chunk()
-                elif type == mcproto.TYPE_MULTI_BLOCK_CHANGE:
-                    packet[name]=self.parse_multi_block_change()
-                elif type == mcproto.TYPE_ITEM_DETAILS:
-                    packet[name]=self.parse_item_details()
-                elif type == mcproto.TYPE_EXPLOSION_RECORD:
-                    packet[name]=self.parse_explosion_record()
+                if self.parsers.has_key(type):
+                    packet['name'] = self.parsers[type]()
                 else:
-                    raise "Unknown data type %d" % type
+                    raise Exception("Unknown data type %d" % type)
             packet['packet_bytes']=self.buf[:self.i]
             self.buf = self.buf[self.i:]
             return packet
@@ -308,7 +299,13 @@ class mitm_parser(asyncore.dispatcher):
         return payload
 
     def parse_set_slot(self):
-        return (self.parse_byte(), self.parse_short())
+        # The previously parsed short tells us if we need to parse anything else.
+        self.i -= 2
+        id = self.parse_short()
+        if id != -1:
+            return (self.parse_byte(), self.parse_short())
+        else:
+            return None
 
     def parse_chunk(self):
         self.i -= 4
