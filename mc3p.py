@@ -158,6 +158,8 @@ class mitm_parser(asyncore.dispatcher):
             while packet != None:
                 self.packet_hdlr(packet)
                 packet = parse_packet(self.parse,self.side)
+        except PartialPacketException:
+            pass # Not all data for the current packet is available.
         except Exception:
             logging.info("mitm_parser caught exception")
             self.handle_close()
@@ -172,31 +174,23 @@ class mitm_parser(asyncore.dispatcher):
 ## Parsing functions ##
 
 def parse_packet(stream, side):
-    """Try to parse a single packet out of stream.
-
-    If stream contains a complete packet, we parse it,
-    and return its data as a dictionary. If not, stream
-    will throw an exception, and we'll give up and return None.
-    """
-    try:
-        packet={}
-        # read Packet ID
-        pid = parse_unsigned_byte(stream)
-        spec = mcproto.packet_spec[side]
-        if not spec.has_key(pid):
-            raise UnsupportedPacketException(pid)
-        logging.debug("Trying to parse packet %x" % pid)
-        packet['id'] = pid
-        fmt = spec[pid]
-        for name,type in fmt:
-            if parsefn.has_key(type):
-                packet['name'] = parsefn[type](stream)
-            else:
-                raise Exception("Unknown data type %d" % type)
-        packet['packet_bytes'] = stream.packet_finished()
-        return packet
-    except PartialPacketException:
-        return None
+    """Parse a single packet out of stream, and return it."""
+    packet={}
+    # read Packet ID
+    pid = parse_unsigned_byte(stream)
+    spec = mcproto.packet_spec[side]
+    if not spec.has_key(pid):
+        raise UnsupportedPacketException(pid)
+    logging.debug("Trying to parse packet %x" % pid)
+    packet['id'] = pid
+    fmt = spec[pid]
+    for name,type in fmt:
+        if parsefn.has_key(type):
+            packet['name'] = parsefn[type](stream)
+        else:
+            raise Exception("Unknown data type %d" % type)
+    packet['packet_bytes'] = stream.packet_finished()
+    return packet
 
 def parse_byte(stream):
     return struct.unpack_from(">b",stream.read(1))[0]
