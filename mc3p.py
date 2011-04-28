@@ -102,7 +102,6 @@ class stream(object):
         self.i = 0
         self.tot_bytes = 0
         self.wasted_bytes = 0
-        self.last_report = 0
 
     def append(self,str):
         """Append a string to the stream."""
@@ -141,23 +140,24 @@ class mitm_parser(asyncore.dispatcher):
         self.packet_hdlr = packet_hdlr
         self.close_hdlr = close_hdlr
         self.name = name
-        self.parse = stream()
+        self.stream = stream()
+        self.last_report = 0
 
     def handle_read(self):
         """Read all available bytes, and process as many packets as possible.
         """
         t = time()
-        if self.parse.last_report + 5 < t and self.parse.tot_bytes > 0:
-            self.parse.last_report = t
+        if self.last_report + 5 < t and self.stream.tot_bytes > 0:
+            self.last_report = t
             logging.debug("%s: total/wasted bytes is %d/%d (%f wasted)" % (
-                 self.name, self.parse.tot_bytes, self.parse.wasted_bytes,
-                 100 * float(self.parse.wasted_bytes) / self.parse.tot_bytes))
-        self.parse.append(self.recv(4092))
+                 self.name, self.stream.tot_bytes, self.stream.wasted_bytes,
+                 100 * float(self.stream.wasted_bytes) / self.stream.tot_bytes))
+        self.stream.append(self.recv(4092))
         try:
-            packet = parse_packet(self.parse,self.side)
+            packet = parse_packet(self.stream,self.side)
             while packet != None:
                 self.packet_hdlr(packet)
-                packet = parse_packet(self.parse,self.side)
+                packet = parse_packet(self.stream,self.side)
         except PartialPacketException:
             pass # Not all data for the current packet is available.
         except Exception:
