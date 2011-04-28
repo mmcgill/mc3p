@@ -93,20 +93,43 @@ class UnsupportedPacketException(Exception):
 class PartialPacketException(Exception):
     pass
 
-class state(object):
-    """Hold parsing state.
-
-    This class is a simple container for the pieces of state
-    to be threaded through the parsing functions.
-    """
+class stream(object):
+    """Represent a stream of bytes."""
 
     def __init__(self):
-        """Initialize parsing state."""
+        """Initialize the stream."""
         self.buf = ""
         self.i = 0
         self.tot_bytes = 0
         self.wasted_bytes = 0
         self.last_report = 0
+
+    def append(self,str):
+        """Append a string to the stream."""
+        self.buf += str
+
+    def read(self,n):
+        """Read n bytes, returned as a string."""
+        if self.i + n > len(self.buf):
+            self.wasted_bytes += self.i
+            self.i = 0
+            raise PartialPacketException()
+        str = self.buf[self.i:self.i+n]
+        self.i += n
+        return str
+
+    def packet_finished(self):
+        """Mark the completion of a packet, and return its bytes as a string."""
+        # Discard all data that was read for the previous packet,
+        # and reset i.
+        data = ""
+        if self.i > 0:
+            data = self.buf[:self.i]
+            self.buf = self.buf[self.i:]
+            self.tot_bytes += self.i
+            self.i = 0
+        return data
+
 
 class mitm_parser(asyncore.dispatcher):
     """Parses a packet stream from a Minecraft client or server.
@@ -118,7 +141,7 @@ class mitm_parser(asyncore.dispatcher):
         self.packet_hdlr = packet_hdlr
         self.close_hdlr = close_hdlr
         self.name = name
-        self.parse = state()
+        self.parse = stream()
 
     def handle_read(self):
         """Read all available bytes, and process as many packets as possible.
@@ -129,7 +152,7 @@ class mitm_parser(asyncore.dispatcher):
             logging.debug("%s: total/wasted bytes is %d/%d (%f wasted)" % (
                  self.name, self.parse.tot_bytes, self.parse.wasted_bytes,
                  100 * float(self.parse.wasted_bytes) / self.parse.tot_bytes))
-        self.parse.buf += self.recv(4092)
+        self.parse.append(self.recv(4092))
         try:
             packet = parse_packet(self.parse,self.side)
             while packet != None:
@@ -148,18 +171,17 @@ class mitm_parser(asyncore.dispatcher):
 
 ## Parsing functions ##
 
-def parse_packet(parse, side):
-    """Try to parse a single packet out of parse.buf.
+def parse_packet(stream, side):
+    """Try to parse a single packet out of stream.
 
-    If parse.buf contains a complete packet, we parse it,
-    remove it's data from parse.buf, and return it as a dictionary.
-    Otherwise, we leave parse.buf alone and return None.
+    If stream contains a complete packet, we parse it,
+    and return its data as a dictionary. If not, stream
+    will throw an exception, and we'll give up and return None.
     """
-    parse.i=0
     try:
         packet={}
         # read Packet ID
-        pid = parse_unsigned_byte(parse)
+        pid = parse_unsigned_byte(stream)
         spec = mcproto.packet_spec[side]
         if not spec.has_key(pid):
             raise UnsupportedPacketException(pid)
@@ -168,178 +190,132 @@ def parse_packet(parse, side):
         fmt = spec[pid]
         for name,type in fmt:
             if parsefn.has_key(type):
-                packet['name'] = parsefn[type](parse)
+                packet['name'] = parsefn[type](stream)
             else:
                 raise Exception("Unknown data type %d" % type)
-        packet['packet_bytes']=parse.buf[:parse.i]
-        parse.buf = parse.buf[parse.i:]
+        packet['packet_bytes'] = stream.packet_finished()
         return packet
     except PartialPacketException:
-        parse.wasted_bytes += parse.i
         return None
-    finally:
-        parse.tot_bytes += parse.i
 
-def parse_byte(parse):
-    if (parse.i+1 > len(parse.buf)):
-        raise PartialPacketException()
-    byte = struct.unpack_from(">b",parse.buf,parse.i)[0]
-    parse.i += 1
-    return byte
+def parse_byte(stream):
+    return struct.unpack_from(">b",stream.read(1))[0]
 
-def parse_unsigned_byte(parse):
-    if (parse.i+1 > len(parse.buf)):
-        raise PartialPacketException()
-    byte = struct.unpack_from(">B",parse.buf,parse.i)[0]
-    parse.i += 1
-    return byte
+def parse_unsigned_byte(stream):
+    return struct.unpack(">B",stream.read(1))[0]
 
-def parse_short(parse):
-    if (parse.i+2 > len(parse.buf)):
-        raise PartialPacketException()
-    short = struct.unpack_from(">h",parse.buf,parse.i)[0]
-    parse.i += 2
-    return short
+def parse_short(stream):
+    return struct.unpack_from(">h",stream.read(2))[0]
 
-def parse_int(parse):
-    if (parse.i+4 > len(parse.buf)):
-        raise PartialPacketException()
-    num = struct.unpack_from(">i",parse.buf,parse.i)[0]
-    parse.i += 4
-    return num
+def parse_int(stream):
+    return struct.unpack_from(">i",stream.read(4))[0]
 
-def parse_long(parse):
-    if (parse.i+8 > len(parse.buf)):
-        raise PartialPacketException()
-    num = struct.unpack_from(">l",parse.buf,parse.i)[0]
-    parse.i += 8
-    return num
+def parse_long(stream):
+    return struct.unpack_from(">l",stream.read(8))[0]
 
-def parse_float(parse):
-    if (parse.i+4 > len(parse.buf)):
-        raise PartialPacketException()
-    num = struct.unpack_from(">f",parse.buf,parse.i)[0]
-    parse.i += 4
-    return num
+def parse_float(stream):
+    return struct.unpack_from(">f",stream.read(4))[0]
 
-def parse_double(parse):
-    if (parse.i+8 > len(parse.buf)):
-        raise PartialPacketException()
-    num = struct.unpack_from(">d",parse.buf,parse.i)[0]
-    parse.i += 8
-    return num
+def parse_double(stream):
+    return struct.unpack_from(">d",stream.read(8))[0]
 
-def parse_string(parse):
-    length = parse_short(parse)
-    if (length == 0):
+def parse_string(stream):
+    n = parse_short(stream)
+    if n == 0:
         return ""
-    if (parse.i + length > len(parse.buf)):
-        raise PartialPacketException()
-    str = parse.buf[parse.i:parse.i+length]
-    parse.i += length
-    return str
+    return stream.read(n)
 
-def parse_bool(parse):
-    if (parse.i+1 > len(parse.buf)):
-        raise PartialPacketException()
-    b = struct.unpack_from(">B",parse.buf,parse.i)[0]
+def parse_bool(stream):
+    b = struct.unpack_from(">B",stream.read(1))[0]
     if b==0:
-        b=False
+        return False
     else:
-        b=True
-    parse.i += 1
-    return b
+        return True
 
-def parse_metadata(parse):
-    if (parse.i+1 > len(parse.buf)):
-        raise PartialPacketException()
+def parse_metadata(stream):
     data=[]
-    type = parse_unsigned_byte(parse)
+    type = parse_unsigned_byte(stream)
     while (type != 127):
         type = type >> 5
         if type == 0:
-            data.append(parse_byte(parse))
+            data.append(parse_byte(stream))
         elif type == 1:
-            data.append(parse_short(parse))
+            data.append(parse_short(stream))
         elif type == 2:
-            data.append(parse_int(parse))
+            data.append(parse_int(stream))
         elif type == 3:
-            data.append(parse_float(parse))
+            data.append(parse_float(stream))
         elif type == 4:
-            data.append(parse_string(parse))
+            data.append(parse_string(stream))
         elif type == 5:
-            data.append(parse_short(parse))
-            data.append(parse_byte(parse))
-            data.append(parse_short(parse))
+            data.append(parse_short(stream))
+            data.append(parse_byte(stream))
+            data.append(parse_short(stream))
         else:
-            logging.error(repr(parse.buf[:parse.i]))
+            logging.error(repr(stream.buf[:parse.i]))
             raise Exception("Unknown metadata type %d" % type)
-        type = parse_byte(parse)
+        type = parse_byte(stream)
     return data
 
-def parse_inventory(parse):
+def parse_inventory(stream):
     # The previously parsed short is the count of slots.
-    parse.i -= 2
-    count = parse_short(parse)
+    stream.i -= 2
+    count = parse_short(stream)
     payload = {}
     for j in xrange(0,count):
-        item_id = parse_short(parse)
+        item_id = parse_short(stream)
         if item_id != -1:
-            c = parse_byte(parse)
-            u = parse_short(parse)
+            c = parse_byte(stream)
+            u = parse_short(stream)
             payload[j] = (item_id,c,u)
         else:
             payload[j] = None
     return payload
 
-def parse_set_slot(parse):
+def parse_set_slot(stream):
     # The previously parsed short tells us if we need to parse anything else.
-    parse.i -= 2
-    id = parse_short(parse)
+    stream.i -= 2
+    id = parse_short(stream)
     if id != -1:
-        return (parse_byte(parse), parse_short(parse))
+        return (parse_byte(stream), parse_short(stream))
     else:
         return None
 
-def parse_chunk(parse):
-    parse.i -= 4
-    length = parse_int(parse)
-    if (parse.i + length > len(parse.buf)):
-        raise PartialPacketException()
-    data = parse.buf[parse.i:parse.i+length]
-    parse.i += length
-    return data
+def parse_chunk(stream):
+    stream.i -= 4
+    n = parse_int(stream)
+    return stream.read(n)
 
-def parse_multi_block_change(parse):
-    parse.i -= 2
-    length = parse_short(parse)
+def parse_multi_block_change(stream):
+    stream.i -= 2
+    length = parse_short(stream)
     coord_array = []
     for j in xrange(0,length):
-        coord_array.append(parse_short(parse))
+        coord_array.append(parse_short(stream))
     type_array = []
     for j in xrange(0,length):
-        type_array.append(parse_byte(parse))
+        type_array.append(parse_byte(stream))
     metadata_array = []
     for j in xrange(0,length):
-        metadata_array.append(parse_byte(parse))
+        metadata_array.append(parse_byte(stream))
     return {'coord_array': coord_array,
             'type_array': type_array,
             'metadata_array': metadata_array}
 
-def parse_item_details(parse):
-    parse.i -= 2
-    id = parse_short(parse)
+def parse_item_details(stream):
+    stream.i -= 2
+    id = parse_short(stream)
     if (id >= 0):
-        return {'count':parse_byte(parse),'uses':parse_short(parse)}
+        return {'count':parse_byte(stream),'uses':parse_short(stream)}
     else:
         return None
 
-def parse_explosion_record(parse):
-    parse.i -= 4
-    c = parse_int(parse)
+def parse_explosion_record(stream):
+    stream.i -= 4
+    c = parse_int(stream)
     records = []
     for j in xrange(0,c):
-        records.append( (parse_byte(parse),parse_byte(parse),parse_byte(parse) ))
+        records.append( (parse_byte(stream),parse_byte(stream),parse_byte(stream) ))
     return records
 
 # Map of data types to parsing functions.
