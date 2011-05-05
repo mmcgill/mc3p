@@ -233,10 +233,10 @@ server_packet_spec = {
            ('vehicle_id', parse_int)],
     0x28: [('eid',parse_int),
            ('metadata',parse_metadata)],
-    0x32: [('x',parse_int),
+    0x32: [('x',parse_int),             # Pre-chunk
            ('z',parse_int),
            ('mode',parse_bool)],
-    0x33: [('x',parse_int),
+    0x33: [('x',parse_int),             # Chunk
            ('y',parse_short),
            ('z',parse_int),
            ('size_x',parse_byte),
