@@ -55,24 +55,29 @@ class mitm_channel:
     def handle_client_packet(self,packet):
         """Handle a packet from the client."""
         logging.debug("client packet: %s" % repr(packet))
-        pid = packet['id']
-        if handlers.has_key(pid):
-            for handler in handlers[pid]:
-                ret = handler(packet, 'client')
-                if ret != None and ret == False:
-                    return
-        self.mitm_server.send(packet['packet_bytes'])
+        if self.call_handlers(packet,'client'):
+            self.mitm_server.send(packet['packet_bytes'])
 
     def handle_server_packet(self,packet):
         """Handle a packet from the server."""
         logging.debug("server packet: %s" % repr(packet))
-        pid = packet['id']
-        if handlers.has_key(pid):
-            for handler in handlers[pid]:
-                ret = handler(packet, 'server')
+        if self.call_handlers(packet,'client'):
+            self.mitm_client.send(packet['packet_bytes'])
+
+    def call_handlers(self,packet,side):
+        msgtype = packet['msgtype']
+        if not handlers.has_key(msgtype):
+            return True
+        for handler in handlers[msgtype]:
+            try:
+                ret = handler(packet, side)
                 if ret != None and ret == False:
-                    return
-        self.mitm_client.send(packet['packet_bytes'])
+                    return False
+            except:
+                print "Exception in handler %s.%s"%(handler.__module__,handler.__name__)
+                print "message: %s" % repr(packet)
+                print_exc()
+        return True
 
     def client_closed(self):
         logging.info("mitm_channel: client socket closed")
@@ -184,7 +189,7 @@ def parse_packet(stream, side):
     if not spec.has_key(pid):
         raise UnsupportedPacketException(pid)
     logging.debug("Trying to parse packet %x" % pid)
-    packet['id'] = pid
+    packet['msgtype'] = pid
     fmt = spec[pid]
     for name,fn in fmt:
         packet[name] = fn(stream)
