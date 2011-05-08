@@ -87,13 +87,24 @@ MC_double = Parsem(parse_double, emit_double)
 def parse_string(stream):
     n = parse_short(stream)
     if n == 0:
-        return ""
-    return stream.read(n)
+        return unicode("", encoding="utf-16-be")
+    return unicode(stream.read(2*n), encoding="utf-16-be")
 
 def emit_string(s):
-    return ''.join([emit_short(len(s)),s])
+    return ''.join([emit_short(len(s)), s.decode(encoding="utf-16-be")])
 
 MC_string = Parsem(parse_string, emit_string)
+
+def parse_string8(stream):
+    n = parse_short(stream)
+    if n == 0:
+        return ''
+    return stream.read(n)
+
+def emit_string8(s):
+    return ''.join([emit_short(len(s)),s])
+
+MC_string8 = Parsem(parse_string8, emit_string8)
 
 def parse_bool(stream):
     b = struct.unpack_from(">B",stream.read(1))[0]
@@ -216,8 +227,8 @@ def parse_explosion_records(stream):
 
 def emit_explosion_records(msg):
     return ''.join([emit_int(msg['count']),
-                    ''.join([emit_byte(rec[0]), emit_byte(rec[1]), emit_byte(rec[2])])
-                             for rec in msg['data']])
+                    ''.join([(emit_byte(rec[0]), emit_byte(rec[1]), emit_byte(rec[2]))
+                             for rec in msg['data']])])
 
 MC_explosion_records = Parsem(parse_explosion_records, emit_explosion_records)
 

@@ -14,12 +14,10 @@ srv_msgs[0x00] = defmsg(0x00,"Keep Alive",[])
 cli_msgs[0x01] = defmsg(0x01,"Login Request",[
     ('proto_version',MC_int),
     ('username',MC_string),
-    ('password',MC_string),
     ('map_seed',MC_long),
     ('dimension',MC_byte)])
 srv_msgs[0x01] = defmsg(0x01,"Login Response",[
     ('eid',MC_int),
-    ('reserved',MC_string),
     ('reserved',MC_string),
     ('map_seed',MC_long),
     ('dimension',MC_byte)])
@@ -288,10 +286,17 @@ srv_msgs[0x3c] = defmsg(0x3c, "Explosion", [
     ('count', MC_int),
     ('records', MC_explosion_records)])
 
+srv_msgs[0x47] = defmsg(0x47, "Weather", [
+    ('eid', MC_int),
+    ('raining', MC_bool),
+    ('x', MC_int),
+    ('y', MC_int),
+    ('z', MC_int)])
+
 srv_msgs[0x64] = defmsg(0x64, "Open window", [
     ('window_id', MC_byte),
     ('inv_type', MC_byte),
-    ('window_title', MC_string),
+    ('window_title', MC_string8),
     ('num_slots', MC_byte)])
 
 cli_msgs[0x65] = \
@@ -303,6 +308,7 @@ cli_msgs[0x66] = defmsg(0x66, "Window click", [
     ('slot', MC_short),
     ('is_right_click', MC_bool),
     ('action_num', MC_short),
+    ('shift', MC_bool),
     ('details', MC_item_details)])
 
 srv_msgs[0x67] = defmsg(0x67, "Set slot", [
@@ -334,6 +340,10 @@ srv_msgs[0x82] = defmsg(0x82, "Update sign", [
     ('text2', MC_string),
     ('text3', MC_string),
     ('text4', MC_string)])
+
+srv_msgs[0xc8] = defmsg(0xc8, "Increment statistic", [
+    ('stat_id', MC_int),
+    ('amount', MC_byte)])
 
 cli_msgs[0xff] = \
 srv_msgs[0xff] = defmsg(0xff, "Disconnect/Kick", [

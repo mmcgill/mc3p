@@ -1,5 +1,5 @@
 import asyncore, socket, sys, signal, struct, logging, re, os.path, inspect, imp
-from traceback import print_exc
+import traceback
 from time import time
 
 import mcproto
@@ -74,9 +74,9 @@ class mitm_channel:
                 if ret != None and ret == False:
                     return False
             except:
-                print "Exception in handler %s.%s"%(handler.__module__,handler.__name__)
-                print "message: %s" % repr(packet)
-                print_exc()
+                logging.error("Exception in handler %s.%s"%(handler.__module__,handler.__name__))
+                logging.info("current MC message: %s" % repr(packet))
+                logging.error(traceback.format_exc())
         return True
 
     def client_closed(self):
@@ -170,9 +170,10 @@ class mitm_parser(asyncore.dispatcher):
         except PartialPacketException:
             pass # Not all data for the current packet is available.
         except Exception:
-            logging.info("mitm_parser caught exception")
+            logging.error("mitm_parser caught exception")
+            logging.error(traceback.format_exc())
+            logging.debug("Current stream buffer: %s" % repr(self.stream.buf))
             self.handle_close()
-            raise
 
     def handle_close(self):
         logging.info("mitm_socket closed")
@@ -229,10 +230,10 @@ def load_plugins_with_precedence():
         try:
             ppath = os.path.join(pdir,pname)+".py"
             mod = imp.load_source(pname, ppath)
-            print "Loaded %s"%os.path.abspath(mod.__file__)
+            logging.info("Loaded %s"%os.path.abspath(mod.__file__))
         except:
-            print "ERROR: Failed to load plugin '%s' (from plugin.conf:%d)."%(pname,lnum)
-            print_exc()
+            logging.error("ERROR: Failed to load plugin '%s' (from plugin.conf:%d)."%(pname,lnum))
+            logging.error(traceback.format_exc())
             continue
         plugins[pname] = mod
 
@@ -362,7 +363,7 @@ def read_to_next_hdr(f, last_lnum):
 if __name__ == "__main__":
     logging.basicConfig(
         #filename='mitm.log',
-        level=logging.INFO)
+        level=logging.DEBUG)
     signal.signal(signal.SIGINT, sigint_handler)
     load_plugins_with_precedence()
     lstnr = mitm_listener(34343, sys.argv[1], int(sys.argv[2]))
