@@ -56,13 +56,13 @@ class mitm_channel:
         """Handle a packet from the client."""
         logging.debug("client packet: %s" % repr(packet))
         if self.call_handlers(packet,'client'):
-            self.mitm_server.send(packet['packet_bytes'])
+            self.mitm_server.send(packet['raw_bytes'])
 
     def handle_server_packet(self,packet):
         """Handle a packet from the server."""
         logging.debug("server packet: %s" % repr(packet))
         if self.call_handlers(packet,'client'):
-            self.mitm_client.send(packet['packet_bytes'])
+            self.mitm_client.send(packet['raw_bytes'])
 
     def call_handlers(self,packet,side):
         msgtype = packet['msgtype']
@@ -179,22 +179,20 @@ class mitm_parser(asyncore.dispatcher):
         self.close()
         self.close_hdlr()
 
+msg_spec = (mcproto.cli_msgs, mcproto.srv_msgs)
 
 def parse_packet(stream, side):
     """Parse a single packet out of stream, and return it."""
-    packet={}
     # read Packet ID
-    pid = parse_unsigned_byte(stream)
-    spec = mcproto.packet_spec[side]
-    if not spec.has_key(pid):
-        raise UnsupportedPacketException(pid)
-    logging.debug("Trying to parse packet %x" % pid)
-    packet['msgtype'] = pid
-    fmt = spec[pid]
-    for name,fn in fmt:
-        packet[name] = fn(stream)
-    packet['packet_bytes'] = stream.packet_finished()
-    return packet
+    msgtype = parse_unsigned_byte(stream)
+    spec = msg_spec[side]
+    if not spec[msgtype]:
+        raise UnsupportedPacketException(msgtype)
+    logging.debug("Trying to parse message type %x" % msgtype)
+    msg_parser = spec[msgtype]
+    msg = msg_parser(stream)
+    msg['raw_bytes'] = stream.packet_finished()
+    return msg
 
 
 def sigint_handler(signum, stack):

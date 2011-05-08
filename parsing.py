@@ -21,6 +21,19 @@ def parse_byte(stream):
 def emit_byte(b):
     return struct.pack(">b",b)
 
+
+def defmsg(msgtype, name, pairs):
+    """Build a Parsem for a message out of (name,Parsem) pairs."""
+    def parse(stream):
+        msg = {'msgtype': msgtype}
+        for (name,parsem) in pairs:
+            msg[name] = parsem(stream)
+        return msg
+    def emit(msg):
+        return ''.join([emit_short(msgtype),
+                        ''.join([parsem(msg[name]) for (name,parsem) in pairs])])
+    return Parsem(parse,emit)
+
 MC_byte = Parsem(parse_byte,emit_byte)
 
 def parse_unsigned_byte(stream):
@@ -169,34 +182,42 @@ def emit_chunk(ch):
 MC_chunk = Parsem(parse_chunk, emit_chunk)
 
 def parse_multi_block_change(stream):
-    stream.i -= 2
-    length = parse_short(stream)
-    coord_array = []
-    for j in xrange(0,length):
-        coord_array.append(parse_short(stream))
-    type_array = []
-    for j in xrange(0,length):
-        type_array.append(parse_byte(stream))
-    metadata_array = []
-    for j in xrange(0,length):
-        metadata_array.append(parse_byte(stream))
-    return {'coord_array': coord_array,
-            'type_array': type_array,
-            'metadata_array': metadata_array}
+    n = parse_short(stream)
+    return {'coord_array': [parse_short(stream) for j in xrange(0,n)],
+            'type_array': [parse_byte(stream) for j in xrange(0,n)],
+            'metadata_array': [parse_byte(stream) for j in xrange(0,n)]}
+
+def emit_multi_block_change(changes):
+    return ''.join([emit_short(len(changes['coord_array'])),
+                    ''.join([emit_short(x) for x in changes['coord_array']]),
+                    ''.join([emit_byte(x)  for x in changes['type_array']]),
+                    ''.join([emit_byte(x)  for x in changes['metadata_array']])])
+
+MC_multi_block_change = Parsem(parse_multi_block_change, emit_multi_block_change)
 
 def parse_item_details(stream):
-    stream.i -= 2
     id = parse_short(stream)
-    if (id >= 0):
-        return {'count':parse_byte(stream),'uses':parse_short(stream)}
-    else:
+    if id == 0:
         return None
+    return {'count':parse_byte(stream),'uses':parse_short(stream)}
 
-def parse_explosion_record(stream):
-    stream.i -= 4
-    c = parse_int(stream)
-    records = []
-    for j in xrange(0,c):
-        records.append( (parse_byte(stream),parse_byte(stream),parse_byte(stream) ))
-    return records
+def emit_item_details(details):
+    if details == None:
+        return emit_short(0)
+    return ''.join([emit_byte(details['count']), emit_short(details['uses'])])
+
+MC_item_details = Parsem(parse_item_details, emit_item_details)
+
+def parse_explosion_records(stream):
+    n = parse_int(stream)
+    return { 'count': n,
+             'data': [(parse_byte(stream),parse_byte(stream),parse_byte(stream))
+                      for i in xrange(0,n)]}
+
+def emit_explosion_records(msg):
+    return ''.join([emit_int(msg['count']),
+                    ''.join([emit_byte(rec[0]), emit_byte(rec[1]), emit_byte(rec[2])])
+                             for rec in msg['data']])
+
+MC_explosion_records = Parsem(parse_explosion_records, emit_explosion_records)
 
