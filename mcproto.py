@@ -1,10 +1,5 @@
 from parsing import *
 
-CLIENT_SIDE = 0
-SERVER_SIDE = 1
-
-#TYPE_WINDOW_CLICK = 11
-
 cli_msgs = [None] * 256
 srv_msgs = [None] * 256
 
