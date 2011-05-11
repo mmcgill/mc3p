@@ -208,13 +208,13 @@ MC_multi_block_change = Parsem(parse_multi_block_change, emit_multi_block_change
 
 def parse_item_details(stream):
     id = parse_short(stream)
-    if id == 0:
+    if id == -1:
         return None
     return {'count':parse_byte(stream),'uses':parse_short(stream)}
 
 def emit_item_details(details):
     if details == None:
-        return emit_short(0)
+        return emit_short(-1)
     return ''.join([emit_byte(details['count']), emit_short(details['uses'])])
 
 MC_item_details = Parsem(parse_item_details, emit_item_details)

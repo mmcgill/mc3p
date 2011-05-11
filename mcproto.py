@@ -283,8 +283,11 @@ srv_msgs[0x3c] = defmsg(0x3c, "Explosion", [
     ('y', MC_double),
     ('z', MC_double),
     ('unknown', MC_float),
-    ('count', MC_int),
     ('records', MC_explosion_records)])
+
+cli_msgs[0x46] = \
+srv_msgs[0x46] = defmsg(0x46, "New/Invalid State", [
+    ('reason', MC_byte)])
 
 srv_msgs[0x47] = defmsg(0x47, "Weather", [
     ('eid', MC_int),
