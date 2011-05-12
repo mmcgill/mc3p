@@ -5,6 +5,8 @@ from parsing import *
 
 ### Globals ###
 
+logger = logging.getLogger(__name__)
+
 # Map of plugin name (string) to module.
 plugins = {}
 
@@ -39,10 +41,10 @@ def load_plugins_with_precedence():
         try:
             ppath = os.path.join(pdir,pname)+".py"
             mod = imp.load_source(pname, ppath)
-            logging.info("Loaded %s"%os.path.abspath(mod.__file__))
+            logger.info("Loaded %s"%os.path.abspath(mod.__file__))
         except:
-            logging.error("ERROR: Failed to load plugin '%s' (from plugin.conf:%d)."%(pname,lnum))
-            logging.error(traceback.format_exc())
+            logger.error("ERROR: Failed to load plugin '%s' (from plugin.conf:%d)."%(pname,lnum))
+            logger.error(traceback.format_exc())
             continue
         plugins[pname] = mod
 
@@ -58,7 +60,7 @@ def load_plugins_with_precedence():
             if not handlers.has_key(msgtype):
                 handlers[msgtype] = []
             handlers[msgtype].append(f)
-            logging.info("Registered %s.%s"%(pname,f.__name__))
+            logger.info("Registered %s.%s"%(pname,f.__name__))
 
     # Process message handler sections.
     for (msgtype,lst) in hdlrs.items():
@@ -185,8 +187,8 @@ def init_plugins(cli_proxy, srv_proxy):
         try:
             p.init(c, s)
         except:
-            logging.error("Plugin '%s' failed to initialize." % p.__name__)
-            logging.error(traceback.format_exc())
+            logger.error("Plugin '%s' failed to initialize." % p.__name__)
+            logger.error(traceback.format_exc())
             c.close()
             s.close()
 
@@ -237,12 +239,12 @@ class PluginHandler(asyncore.dispatcher):
             if not self.plugin:
                 self.plugin = MC_string8(self.buf)
                 self.buf.packet_finished()
-                logging.debug("Got client connection from plugin '%s'" % self.plugin)
+                logger.debug("Got client connection from plugin '%s'" % self.plugin)
             size = MC_short(self.buf)
             while size <= len(self.buf):
                 msgbytes = self.buf.read(size)
                 self.buf.packet_finished()
-                logging.debug("Sending %d bytes from plugin %s: %s" % (size, self.plugin, repr(msgbytes)))
+                logger.debug("Sending %d bytes from plugin %s: %s" % (size, self.plugin, repr(msgbytes)))
                 self.proxy.inject_msg(msgbytes)
                 size = MC_short(self.buf)
         except PartialPacketException:
@@ -267,19 +269,19 @@ class PluginClient(asyncore.dispatcher):
     def inject_msg(self, msg):
         """Inject a message into the stream."""
         if not msg.has_key('msgtype'):
-            logging.error("Plugin %s tried to send message without msgtype."%self.plugin)
-            logging.debug("  msg: %s" % repr(msg))
+            logger.error("Plugin %s tried to send message without msgtype."%self.plugin)
+            logger.debug("  msg: %s" % repr(msg))
             return
         msgtype = msg['msgtype']
         if not self.msg_spec[msgtype]:
-            logging.error("Plugin %s tried to send message with unrecognized type %d" % (self.plugin, msgtype))
-            logging.debug("  msg: %s" % repr(msg))
+            logger.error("Plugin %s tried to send message with unrecognized type %d" % (self.plugin, msgtype))
+            logger.debug("  msg: %s" % repr(msg))
             return
         try:
             msgbytes = self.msg_spec[msgtype](msg)
         except:
-            logging.error("Plugin %s sent invalid message of type %d" % (self.plugin, msgtype))
-            logging.debug("  msg: %s" % repr(msg))
+            logger.error("Plugin %s sent invalid message of type %d" % (self.plugin, msgtype))
+            logger.debug("  msg: %s" % repr(msg))
 
         #TODO: make use of asyncore interface to send this in non-blocking fashion.
         self.sendall(MC_short(len(msgbytes)))

@@ -1,5 +1,7 @@
 import struct, logging, inspect
 
+logger = logging.getLogger(__name__)
+
 class Parsem(object):
     """Parser/emitter."""
 
@@ -141,7 +143,7 @@ def parse_metadata(stream):
             data.append(parse_byte(stream))
             data.append(parse_short(stream))
         else:
-            logging.error(repr(stream.buf[:parse.i]))
+            logger.error(repr(stream.buf[:parse.i]))
             raise Exception("Unknown metadata type %d" % type)
         type = parse_byte(stream)
     return data
