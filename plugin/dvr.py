@@ -32,6 +32,10 @@ logger = logging.getLogger('plugin.dvr')
 
 ### Recording ##################
 
+class DVROptParser(optparse.OptionParser):
+    def error(self, msg):
+        raise PluginError(msg)
+
 class DVRPlugin(MC3Plugin):
 
     def init(self, args):
@@ -46,7 +50,7 @@ class DVRPlugin(MC3Plugin):
         self.t0 = time.time()
 
     def parse_plugin_args(self, argstr):
-        parser = optparse.OptionParser()
+        parser = DVROptParser()
         parser.add_option('--cli-file', dest='cli_file', default=None,
                           metavar='PATH', help='client capture file')
         parser.add_option('--srv-file', dest='srv_file', default=None,
