@@ -213,11 +213,16 @@ def init_plugins(cli_proxy, srv_proxy):
             continue
         c = PluginClient("client",pname)
         s = PluginClient("server",pname)
+        init = False
         try:
             p.init(c, s, plugin_args[pname])
+            init = True
+        except PluginError as e:
+            print "Plugin '%s' failed to initialize: %s" % (pname, e.msg)
         except:
             logger.error("Plugin '%s' failed to initialize." % pname)
             logger.error(traceback.format_exc())
+        if not init:
             c.close()
             s.close()
 
@@ -241,7 +246,12 @@ class PluginListener(asyncore.dispatcher):
         if not pair:
             return
         sock, _ = pair
-        PluginHandler(sock, self.stream)
+        # See if the socket is valid.
+        try:
+            sock.getpeername()
+            PluginHandler(sock, self.stream)
+        except socket.error:
+            logger.warn("In PluginListener.handle_accept(), sock.getpeername() failed.")
 
 class PluginHandler(asyncore.dispatcher):
     """Feed messages from plugins into a connection stream.
