@@ -251,7 +251,7 @@ class PluginListener(asyncore.dispatcher):
             sock.getpeername()
             PluginHandler(sock, self.stream)
         except socket.error:
-            logger.warn("In PluginListener.handle_accept(), sock.getpeername() failed.")
+            logger.info("In PluginListener.handle_accept(), sock.getpeername() failed. Did a plugin fail to initialize?")
 
 class PluginHandler(asyncore.dispatcher):
     """Feed messages from plugins into a connection stream.
