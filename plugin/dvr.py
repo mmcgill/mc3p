@@ -40,8 +40,10 @@ class DVRPlugin(MC3Plugin):
 
     def init(self, args):
         self.cli_msgs = set()
+        self.all_cli_msgs = False
         self.cli_msgfile = None
         self.srv_msgs = set()
+        self.all_srv_msgs = False
         self.srv_msgfile = None
         self.parse_plugin_args(args)
         logger.info('initialized')
@@ -70,9 +72,14 @@ class DVRPlugin(MC3Plugin):
         if opts.cli_msgs == '' and opts.srv_msgs == '':
             raise PluginError("Must supply either --cli-msgs or --srv-msgs")
 
-        if opts.cli_msgs != '':
+        if opts.cli_msgs == '*':
+            self.all_cli_msgs = True
+        elif opts.cli_msgs != '':
             self.cli_msgs = set([msg_id(s) for s in opts.cli_msgs.split(',')])
-        if opts.srv_msgs != '':
+
+        if opts.srv_msgs == '*':
+            self.all_srv_msgs = True
+        elif opts.srv_msgs != '':
             self.srv_msgs = set([msg_id(s) for s in opts.srv_msgs.split(',')])
         # Always capture the disconnect messages.
         self.cli_msgs.add(0xff)
@@ -91,9 +98,9 @@ class DVRPlugin(MC3Plugin):
 
     def default_handler(self, msg, dir):
         pid = msg['msgtype']
-        if 'client' == dir and pid in self.cli_msgs:
+        if 'client' == dir and (self.all_cli_msgs or pid in self.cli_msgs):
             self.record_msg(msg, self.cli_msgfile)
-        if 'server' == dir and pid in self.srv_msgs:
+        if 'server' == dir and self.all_srv_msgs or pid in self.srv_msgs):
             self.record_msg(msg, self.srv_msgfile)
 
     def record_msg(self, msg, file):
@@ -138,7 +145,7 @@ class MockServer(asyncore.dispatcher_with_send):
         asyncore.dispatcher_with_send.__init__(self, sock)
         self.msgfile = msgfile
         self.name = name
-        self.clos_on_ff = close_on_ff
+        self.close_on_ff = close_on_ff
         self.t0 = time.time() # start time
         self.nextmsg = None
         self.tnext = None
