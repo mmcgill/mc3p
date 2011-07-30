@@ -1,9 +1,9 @@
 
 import logging
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('plugin.chatty')
 
-def init(sock1, sock2):
+def init(sock1, sock2, args):
     """Initialize the plugin."""
     global cli_sock, srv_sock
     cli_sock = sock1
@@ -15,7 +15,8 @@ def msg03(msg, dir):
     if "server" == dir:
         return True
     msgtxt = msg['chat_msg']
-    logger.info("Intercepted chat message from %s: %s" % (dir, repr(msg['raw_bytes'])))
+    logger.info("%s: %s", dir, msg['chat_msg'])
+    logger.debug("  raw bytes: %s", repr(msg['raw_bytes']))
     cli_sock.inject_msg({'msgtype': 0x03, 'chat_msg': msgtxt+"!"})
     return False
 
