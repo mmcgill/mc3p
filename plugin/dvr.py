@@ -119,8 +119,9 @@ srv_done = False
 
 class MockListener(asyncore.dispatcher_with_send):
     """Listen for client connection, and spawn MockServer."""
-    def __init__(self,host,port,msgfile):
+    def __init__(self,host,port,msgfile,timescale):
         self.msgfile = msgfile
+        self.timescale = timescale
         asyncore.dispatcher_with_send.__init__(self)
         # Listen, and wait for connection.
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -137,14 +138,15 @@ class MockListener(asyncore.dispatcher_with_send):
         else:
             (sock, addr) = pair
             logger.debug("received client connection from %s" % repr(addr))
-            MockServer(sock, self.msgfile, 'server')
+            MockServer(sock, self.msgfile, 'server', self.timescale)
             self.close()
 
 class MockServer(asyncore.dispatcher_with_send):
-    def __init__(self, sock, msgfile, name, close_on_ff=True):
+    def __init__(self, sock, msgfile, name, timescale, close_on_ff=True):
         asyncore.dispatcher_with_send.__init__(self, sock)
         self.msgfile = msgfile
         self.name = name
+        self.timescale = timescale
         self.close_on_ff = close_on_ff
         self.t0 = time.time() # start time
         self.nextmsg = None
@@ -178,9 +180,10 @@ class MockServer(asyncore.dispatcher_with_send):
             self.readmsg()
         if self.nextmsg:
             t = time.time() - self.t0
-            if t >= self.tnext:
+            if t >= self.tnext * self.timescale:
                 msgtype = struct.unpack('>B', self.nextmsg[0])[0]
-                logger.info('%s sending msgtype %x (%d bytes) at t=%f', self.name, msgtype, len(self.nextmsg), t)
+                logger.info('%s sending msgtype %x (%d bytes) at t=%f',
+                            self.name, msgtype, len(self.nextmsg), t)
                 self.send(self.nextmsg)
                 msgtype = struct.unpack('>B', self.nextmsg[0])[0]
                 self.nextmsg = None
@@ -190,11 +193,11 @@ class MockServer(asyncore.dispatcher_with_send):
 
 
 class MockClient(MockServer):
-    def __init__(self,host, port, msgfile):
+    def __init__(self,host, port, msgfile, timescale):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         logger.debug("connecting to %s:%d" % (host,port))
         sock.connect( (host, port) )
-        MockServer.__init__(self, sock, msgfile, "client", False)
+        MockServer.__init__(self, sock, msgfile, "client", timescale, False)
 
 def playback():
     # Parse arguments.
@@ -213,7 +216,7 @@ def playback():
 
     # Start listener, which will associate MockServer with socket on client connect.
     (srv_host, srv_port) = parse_addr(opts.srv_addr)
-    MockListener(srv_host, srv_port, srv_msgfile)
+    MockListener(srv_host, srv_port, srv_msgfile, opts.timescale)
     print "Started server."
 
     # Open client message file.
@@ -224,7 +227,7 @@ def playback():
         sys.exit(1)
     # Start client.
     (cli_host, cli_port) = parse_addr(opts.mc3p_addr)
-    client = MockClient(cli_host, cli_port, cli_msgfile)
+    client = MockClient(cli_host, cli_port, cli_msgfile, opts.timescale)
     print "Started client."
 
     # Loop until we're done.
@@ -273,8 +276,8 @@ def make_arg_parser():
         type='string', metavar='[HOST:]PORT', help='mc3p address', default='localhost:34343')
     parser.add_option('--to', dest='srv_addr',
         type='string', metavar='[HOST:]PORT', help='server address', default='localhost:25565')
-    parser.add_option('-x', '--delay', dest='delay', type='float',
-        metavar='FACTOR', help='multiply delay between messages by FACTOR', default=1.0)
+    parser.add_option('-x', '--timescale', dest='timescale', type='float',
+        metavar='FACTOR', help='scale time between messages by FACTOR', default=1.0)
     parser.add_option('--srv', dest='srv_msgfile', type='string', metavar='SRV_FILE',
         help='path to server message file', default=None)
     parser.add_option('--cli', dest='cli_msgfile', type='string', metavar='CLI_FILE',
