@@ -10,14 +10,27 @@ logger = logging.getLogger(__name__)
 # Map of plugin name (string) to module.
 plugins = {}
 
+# Map of plugin name (string) to argument string.
+plugin_args = {}
+
 # Map of msgtype (int) to list of handler functions.
 handlers = {}
+
+# List of (plugin name, global handler function) pairs.
+global_handlers = []
 
 ### Exceptions ###
 class ConfigException(Exception):
     def __init__(self,msg):
         Exception.__init__(self)
         self.msg = msg
+    def __str__(self):
+        return self.msg
+
+class PluginError(Exception):
+    def __init__(self,msg):
+        self.msg = msg
+
     def __str__(self):
         return self.msg
 
@@ -36,12 +49,21 @@ def load_plugins_with_precedence():
 
     # Load active plugin modules.
     pdir = os.path.dirname(os.path.abspath(__file__))
-    pdir = os.path.join(pdir,"plugins")
-    for (lnum,pname) in active:
+    pdir = os.path.join(pdir,"plugin")
+    for (lnum,line) in active:
+        parts = line.split(" ", 1)
+        pname = parts[0]
+        ppath = os.path.join(pdir,pname)+".py"
+        argstr = ""
+        if len(parts) > 1:
+            pname = parts[0]
+            argstr = parts[1]
+        plugin_args[pname] = argstr
         try:
-            ppath = os.path.join(pdir,pname)+".py"
             mod = imp.load_source(pname, ppath)
             logger.info("Loaded %s"%os.path.abspath(mod.__file__))
+        except PluginError as e:
+            print "Error loading %s: %s" % (pname, str(e))
         except:
             logger.error("ERROR: Failed to load plugin '%s' (from plugin.conf:%d)."%(pname,lnum))
             logger.error(traceback.format_exc())
@@ -49,9 +71,16 @@ def load_plugins_with_precedence():
         plugins[pname] = mod
 
     # Load message handlers.
-    for (lnum,pname) in active:
+    for pname in plugins.keys():
         if not plugins.has_key(pname):
             continue
+        # Look for catch-all message handler 'msgXX'
+        if plugins[pname].__dict__.has_key('msgXX'):
+            msgXX = plugins[pname].__dict__['msgXX']
+            if inspect.isfunction(msgXX):
+                global_handlers.append( (pname, msgXX) )
+
+        # Load message-specific handlers
         for f in filter(inspect.isfunction, plugins[pname].__dict__.values()):
             match = msg_re.match(f.__name__)
             if not match:
@@ -62,7 +91,7 @@ def load_plugins_with_precedence():
             handlers[msgtype].append(f)
             logger.info("Registered %s.%s"%(pname,f.__name__))
 
-    # Process message handler sections.
+    # Process message handler sections, and re-order handlers.
     for (msgtype,lst) in hdlrs.items():
         if not handlers.has_key(msgtype):
             continue
@@ -102,7 +131,7 @@ def read_plugins_conf(f):
     the message handlers.
 
     This function returns a tuple (active,hdlrs). active is a list
-    of (lnum,name) pairs. hdlrs maps message types (int) to
+    of (lnum,line) pairs. hdlrs maps message types (int) to
     lists of (lnum,name) pairs. In each case, lnum is the corresponding
     line number in the config file, useful for generating error messages.
     """
@@ -179,15 +208,15 @@ def init_plugins(cli_proxy, srv_proxy):
     server_plugin_lstnr = PluginListener(srv_proxy, "server")
 
     # Call plugin init methods.
-    for p in plugins.values():
+    for (pname,p) in plugins.items():
         if not p.__dict__.has_key('init') or not inspect.isfunction(p.init):
             continue
-        c = PluginClient("client",p.__name__)
-        s = PluginClient("server",p.__name__)
+        c = PluginClient("client",pname)
+        s = PluginClient("server",pname)
         try:
-            p.init(c, s)
+            p.init(c, s, plugin_args[pname])
         except:
-            logger.error("Plugin '%s' failed to initialize." % p.__name__)
+            logger.error("Plugin '%s' failed to initialize." % pname)
             logger.error(traceback.format_exc())
             c.close()
             s.close()

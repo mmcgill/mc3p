@@ -1,9 +1,14 @@
-import asyncore, socket, sys, signal, struct, logging, logging.config, re, os.path, inspect, imp
+import logging, logging.config, os
+import asyncore, socket, sys, signal, struct, logging.config, re, os.path, inspect, imp
 import traceback, tempfile
 from time import time
 from optparse import OptionParser
 
-import mcproto, plugins
+dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(dir)
+
+import mcproto
+import plugins
 from parsing import parse_unsigned_byte
 from util import Stream, PartialPacketException
 
@@ -67,7 +72,7 @@ def create_proxies(clientsock, dsthost, dstport):
         """Close proxies and exit."""
         if shutting_down[0]:
             return
-        print "%s socket closed, shutting down." % side
+        logger.warn("%s socket closed, shutting down.", side)
         shutting_down[0] = True
         if cli_proxy:
             cli_proxy.close()
@@ -78,7 +83,7 @@ def create_proxies(clientsock, dsthost, dstport):
         serversock = socket.create_connection( (dsthost,dstport) )
     except Exception as e:
         clientsock.close()
-        print "Couldn't connect to %s:%d - %s" % (dsthost,dstport,str(e))
+        logger.error("Couldn't connect to %s:%d - %s", dsthost, dstport, str(e))
         sys.exit(1)
     cli_proxy = MinecraftProxy(clientsock, serversock, mcproto.cli_msgs, shutdown, 'client')
     srv_proxy = MinecraftProxy(serversock, clientsock, mcproto.srv_msgs, shutdown, 'server')
@@ -90,22 +95,36 @@ class UnsupportedPacketException(Exception):
         Exception.__init__(self,"Unsupported packet id 0x%x" % pid)
 
 
-def call_handlers(handlers,packet,side):
+def call_handlers(packet,side):
     """Call handlers, return True if packet should be forwarded."""
+    # Call all global handlers first.
+    for (pname,hdlr) in plugins.global_handlers:
+        if not call_handler(hdlr, packet, side):
+            return False
+
+    # Call all message-specific handlers next.
     msgtype = packet['msgtype']
-    if not handlers.has_key(msgtype):
+    if not plugins.handlers.has_key(msgtype):
         return True
-    for handler in handlers[msgtype]:
-        try:
-            ret = handler(packet, side)
-            if ret != None and ret == False:
-                return False
-        except:
-            logger.error("Exception in handler %s.%s"%(handler.__module__,handler.__name__))
-            logger.info("current MC message: %s" % repr(packet))
-            logger.error(traceback.format_exc())
+    for handler in plugins.handlers[msgtype]:
+        if not call_handler(handler, packet, side):
+            return False
+
+    # All handlers allowed message
     return True
 
+def call_handler(handler, packet, side):
+    try:
+        ret = handler(packet, side)
+        if ret == False: # 'if not ret:' is incorrect, a None return value means 'allow'
+            return False
+    except plugins.PluginError as e:
+        print "Error in plugin %s: %s" % (handler.__module__, str(e))
+    except:
+        logger.error("Exception in handler %s.%s"%(handler.__module__,handler.__name__))
+        logger.info("current MC message: %s" % repr(packet))
+        logger.error(traceback.format_exc())
+    return True
 
 class MinecraftProxy(asyncore.dispatcher):
     """Proxies a packet stream from a Minecraft client or server.
@@ -135,7 +154,7 @@ class MinecraftProxy(asyncore.dispatcher):
             packet = parse_packet(self.stream, self.msg_spec, self.side)
             while packet != None:
                 logger.debug("%s packet: %s" % (self.side,repr(packet)) )
-                if call_handlers(plugins.handlers, packet, self.side):
+                if call_handlers(packet, self.side):
                     self.dst_sock.sendall(packet['raw_bytes'])
                 # Since we know we're at a message boundary, we can inject
                 # any messages in the queue
@@ -180,35 +199,35 @@ def write_default_logging_file():
 keys=root,mc3p,plugins,parsing
 
 [handlers]
-keys=consoleHandler
+keys=consoleHdlr
 
 [formatters]
 keys=defaultFormatter
 
 [logger_root]
 level=WARN
-handlers=consoleHandler
+handlers=consoleHdlr
 
 [logger_mc3p]
-handlers=consoleHandler
+handlers=
 qualname=mc3p
 
 [logger_plugins]
-handlers=consoleHandler
+handlers=
 qualname=plugins
 
 [logger_parsing]
-handlers=consoleHandler
+handlers=
 qualname=parsing
 
-[handler_consoleHandler]
+[handler_consoleHdlr]
 class=StreamHandler
 formatter=defaultFormatter
 args=(sys.stdout,)
 
 [formatter_defaultFormatter]
-format=(%(asctime)s) %(name)s - %(levelname)s: %(message)s
-datefmt=
+format=%(levelname)s|%(asctime)s|%(name)s - %(message)s
+datefmt=%H:%M:%S
 """
     f=None
     try:
@@ -223,9 +242,9 @@ if __name__ == "__main__":
     # Initialize logging.
     if not os.path.exists('logging.conf'):
         write_default_logging_file()
-
     logging.config.fileConfig('logging.conf')
     #logging.basicConfig(level=logging.INFO)
+
     if opts.loglvl:
         print opts.loglvl
         logging.root.setLevel(getattr(logging, opts.loglvl.upper()))

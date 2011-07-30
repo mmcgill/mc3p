@@ -1,6 +1,6 @@
 import struct, logging, inspect
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('parsing')
 
 class Parsem(object):
     """Parser/emitter."""
