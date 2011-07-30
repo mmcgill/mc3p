@@ -30,7 +30,7 @@ def defmsg(msgtype, name, pairs):
             msg[name] = parsem(stream)
         return msg
     def emit(msg):
-        return ''.join([emit_short(msgtype),
+        return ''.join([emit_unsigned_byte(msgtype),
                         ''.join([parsem(msg[name]) for (name,parsem) in pairs])])
     return Parsem(parse,emit)
 
@@ -91,7 +91,7 @@ def parse_string(stream):
     return unicode(stream.read(2*n), encoding="utf-16-be")
 
 def emit_string(s):
-    return ''.join([emit_short(len(s)), s.decode(encoding="utf-16-be")])
+    return ''.join([emit_short(len(s)), s.encode("utf-16-be")])
 
 MC_string = Parsem(parse_string, emit_string)
 

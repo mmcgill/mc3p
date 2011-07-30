@@ -4,6 +4,7 @@ from time import time
 
 import mcproto, plugins
 from parsing import parse_unsigned_byte
+from util import Stream, PartialPacketException
 
 
 def sigint_handler(signum, stack):
@@ -75,51 +76,6 @@ class UnsupportedPacketException(Exception):
         Exception.__init__(self,"Unsupported packet id 0x%x" % pid)
 
 
-class PartialPacketException(Exception):
-    """Thrown during parsing when not a complete packet is not available."""
-    pass
-
-
-class Stream(object):
-    """Represent a stream of bytes."""
-
-    def __init__(self):
-        """Initialize the stream."""
-        self.buf = ""
-        self.i = 0
-        self.tot_bytes = 0
-        self.wasted_bytes = 0
-
-    def append(self,str):
-        """Append a string to the stream."""
-        self.buf += str
-
-    def read(self,n):
-        """Read n bytes, returned as a string."""
-        if self.i + n > len(self.buf):
-            self.wasted_bytes += self.i
-            self.i = 0
-            raise PartialPacketException()
-        str = self.buf[self.i:self.i+n]
-        self.i += n
-        return str
-
-    def packet_finished(self):
-        """Mark the completion of a packet, and return its bytes as a string."""
-        # Discard all data that was read for the previous packet,
-        # and reset i.
-        data = ""
-        if self.i > 0:
-            data = self.buf[:self.i]
-            self.buf = self.buf[self.i:]
-            self.tot_bytes += self.i
-            self.i = 0
-        return data
-
-    def __len__(self):
-        return len(self.buf) - i
-
-
 def call_handlers(handlers,packet,side):
     """Call handlers, return True if packet should be forwarded."""
     msgtype = packet['msgtype']
@@ -149,6 +105,7 @@ class MinecraftProxy(asyncore.dispatcher):
         self.side = side
         self.stream = Stream()
         self.last_report = 0
+        self.msg_queue = []
 
     def handle_read(self):
         """Read all available bytes, and process as many packets as possible.
@@ -166,6 +123,11 @@ class MinecraftProxy(asyncore.dispatcher):
                 logging.debug("%s packet: %s" % (self.side,repr(packet)) )
                 if call_handlers(plugins.handlers, packet, self.side):
                     self.dst_sock.sendall(packet['raw_bytes'])
+                # Since we know we're at a message boundary, we can inject
+                # any messages in the queue
+                for msgbytes in self.msg_queue:
+                    self.dst_sock.sendall(msgbytes)
+                self.msg_queue = []
                 packet = parse_packet(self.stream,self.msg_spec, self.side)
         except PartialPacketException:
             pass # Not all data for the current packet is available.
@@ -178,6 +140,9 @@ class MinecraftProxy(asyncore.dispatcher):
     def handle_close(self):
         """Call shutdown handler."""
         self.on_shutdown(self.side)
+
+    def inject_msg(self, bytes):
+        self.msg_queue.append(bytes)
 
 
 def parse_packet(stream, msg_spec, side):
@@ -211,11 +176,8 @@ if __name__ == "__main__":
     # Set up client/server main-in-the-middle.
     (cli_proxy, srv_proxy) = create_proxies(cli_sock, host, port)
 
-    client_plugin_lstnr = plugins.PluginListener(cli_proxy, "client")
-    server_plugin_lstnr = plugins.PluginListener(srv_proxy, "server")
-
     # Initialize plugins.
-    plugins.init_plugins()
+    plugins.init_plugins(cli_proxy, srv_proxy)
 
     # I/O event loop.
     asyncore.loop()

@@ -1,14 +1,23 @@
-import re, asyncore, os, socket
+import re, asyncore, os, socket, logging, traceback, imp, inspect
+import mcproto
+from util import Stream, PartialPacketException
+from parsing import *
 
+### Globals ###
+
+# Map of plugin name (string) to module.
+plugins = {}
+
+# Map of msgtype (int) to list of handler functions.
+handlers = {}
+
+### Exceptions ###
 class ConfigException(Exception):
     def __init__(self,msg):
         Exception.__init__(self)
         self.msg = msg
     def __str__(self):
         return self.msg
-
-plugins = {}
-handlers = {}
 
 def load_plugins_with_precedence():
     """Load active plugins, return a map of message type to handler list."""
@@ -49,7 +58,7 @@ def load_plugins_with_precedence():
             if not handlers.has_key(msgtype):
                 handlers[msgtype] = []
             handlers[msgtype].append(f)
-            print "Registered %s.%s"%(pname,f.__name__)
+            logging.info("Registered %s.%s"%(pname,f.__name__))
 
     # Process message handler sections.
     for (msgtype,lst) in hdlrs.items():
@@ -68,24 +77,6 @@ def load_plugins_with_precedence():
                     break
             if not found:
                 print "plugin.conf line %d: module %s has no function msg%02X" % (lnum,mname,msgtype)
-
-def init_plugins():
-    """Call plugin init() methods.
-
-    Assumes that a PluginListener has already been created."""
-    # Call plugin init methods.
-    for p in plugins.values():
-        if not p.__dict__.has_key('init') or not inspect.isfunction(p.init):
-            continue
-        c = PluginClient("client",p.__name__)
-        s = PluginClient("server",p.__name__)
-        try:
-            p.init(c, s)
-        except:
-            logging.error("Plugin '%s' failed to initialize." % p.__name__)
-            logging.error(traceback.format_exc())
-            c.close()
-            s.close()
 
 def read_plugins_conf(f):
     """Read plugin config file f, return plugin config data structure.
@@ -180,6 +171,25 @@ def read_to_next_hdr(f, last_lnum):
 
 PLUGIN_SOCKET_PATH = "/tmp/mc3psock"
 
+def init_plugins(cli_proxy, srv_proxy):
+    """Call plugin init() methods."""
+    client_plugin_lstnr = PluginListener(cli_proxy, "client")
+    server_plugin_lstnr = PluginListener(srv_proxy, "server")
+
+    # Call plugin init methods.
+    for p in plugins.values():
+        if not p.__dict__.has_key('init') or not inspect.isfunction(p.init):
+            continue
+        c = PluginClient("client",p.__name__)
+        s = PluginClient("server",p.__name__)
+        try:
+            p.init(c, s)
+        except:
+            logging.error("Plugin '%s' failed to initialize." % p.__name__)
+            logging.error(traceback.format_exc())
+            c.close()
+            s.close()
+
 class PluginListener(asyncore.dispatcher):
     """Listen for UNIX socket connections from plugins."""
 
@@ -214,25 +224,27 @@ class PluginHandler(asyncore.dispatcher):
     A plugin starts by sending an MC_string8 to identify itself.
     It then sends a sequence of messages, each prefixed by its length."""
 
-    def __init__(self, sock, stream):
-        asyncore.dispatcher.__init__(self,sock)
-        self.stream = stream
+    def __init__(self, sock, proxy):
+        self.proxy = proxy
         self.plugin = None
-        self.buf = stream()
+        self.buf = Stream()
+        asyncore.dispatcher.__init__(self,sock)
 
     def handle_read(self):
         data = self.recv(4096)
-        buf.append(data)
+        self.buf.append(data)
         try:
-            if not plugin:
-                plugin = MC_string8(buf)
-                logging.debug("Got client connection from plugin '%s'" % plugin)
-            size = MC_short(buf)
-            while size <= len(buf):
-                msgbytes = buf.read(size)
-                logging.debug("Sending %d bytes from plugin %s" % (size, plugin))
-                self.stream.send(msgbytes)
-                buf.packet_finished()
+            if not self.plugin:
+                self.plugin = MC_string8(self.buf)
+                self.buf.packet_finished()
+                logging.debug("Got client connection from plugin '%s'" % self.plugin)
+            size = MC_short(self.buf)
+            while size <= len(self.buf):
+                msgbytes = self.buf.read(size)
+                self.buf.packet_finished()
+                logging.debug("Sending %d bytes from plugin %s: %s" % (size, self.plugin, repr(msgbytes)))
+                self.proxy.inject_msg(msgbytes)
+                size = MC_short(self.buf)
         except PartialPacketException:
             pass # Not enough data in the buffer
 
@@ -244,27 +256,27 @@ class PluginClient(asyncore.dispatcher):
 
         suffix is 'client' or 'server', and plugin is the plugin's name."""
         if 'client' == suffix:
-            self.msg_spec = cli_msgs
+            self.msg_spec = mcproto.cli_msgs
         else:
-            self.msg_spec = srv_msgs
+            self.msg_spec = mcproto.srv_msgs
         asyncore.dispatcher.__init__(self)
         self.create_socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self.connect(PLUGIN_SOCKET_NAME+"-"+suffix)
+        self.connect(PLUGIN_SOCKET_PATH+"-"+suffix)
         self.sendall(MC_string8(plugin))
 
-    def inject_msg(msg):
+    def inject_msg(self, msg):
         """Inject a message into the stream."""
         if not msg.has_key('msgtype'):
             logging.error("Plugin %s tried to send message without msgtype."%self.plugin)
             logging.debug("  msg: %s" % repr(msg))
             return
         msgtype = msg['msgtype']
-        if not msg_spec[msgtype]:
+        if not self.msg_spec[msgtype]:
             logging.error("Plugin %s tried to send message with unrecognized type %d" % (self.plugin, msgtype))
             logging.debug("  msg: %s" % repr(msg))
             return
         try:
-            msgbytes = msg_spec[msgtype](msg)
+            msgbytes = self.msg_spec[msgtype](msg)
         except:
             logging.error("Plugin %s sent invalid message of type %d" % (self.plugin, msgtype))
             logging.debug("  msg: %s" % repr(msg))
