@@ -234,3 +234,33 @@ def emit_explosion_records(msg):
 
 MC_explosion_records = Parsem(parse_explosion_records, emit_explosion_records)
 
+def parse_vehicle_data(stream):
+    x = parse_int(stream)
+    data = { 'unknown1': x }
+    if x > 0:
+        data['unknown2'] = parse_short(stream)
+        data['unknown3'] = parse_short(stream)
+        data['unknown4'] = parse_short(stream)
+    return data
+
+def emit_vehicle_data(data):
+    x = data['unknown1']
+    str = emit_int(x)
+    if x > 0:
+        str = ''.join([str, emit_int(data['unknown2']), emit_int(data['unknown3']), emit_int(data['unknown4'])])
+    return str
+
+MC_vehicle_data = Parsem(parse_vehicle_data, emit_vehicle_data)
+
+def parse_item_data(stream):
+    n = parse_unsigned_byte(stream)
+    if n == 0:
+        return ''
+    return stream.read(n)
+
+def emit_item_data(s):
+    assert len(s) < 265
+    return ''.join([emit_unsigned_byte(len(s)),s])
+
+MC_item_data = Parsem(parse_item_data, emit_item_data)
+

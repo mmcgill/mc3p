@@ -1,7 +1,7 @@
 import logging, logging.config, os
 import asyncore, socket, sys, signal, struct, logging.config, re, os.path, inspect, imp
 import traceback, tempfile
-from time import time
+from time import time, sleep
 from optparse import OptionParser
 
 dir = os.path.dirname(os.path.abspath(__file__))
@@ -78,7 +78,6 @@ def create_proxies(clientsock, dsthost, dstport):
             cli_proxy.close()
         if srv_proxy:
             srv_proxy.close()
-        sys.exit(0)
     try:
         serversock = socket.create_connection( (dsthost,dstport) )
     except Exception as e:
@@ -252,16 +251,18 @@ if __name__ == "__main__":
     # Install signal handler.
     signal.signal(signal.SIGINT, sigint_handler)
 
-    cli_sock = wait_for_client(port=34343)
+    while True:
+        cli_sock = wait_for_client(port=34343)
 
-    plugins.load_plugins_with_precedence()
+        #plugins.load_plugins_with_precedence()
 
-    # Set up client/server main-in-the-middle.
-    (cli_proxy, srv_proxy) = create_proxies(cli_sock, host, port)
+        # Set up client/server main-in-the-middle.
+        sleep(0.05)
+        (cli_proxy, srv_proxy) = create_proxies(cli_sock, host, port)
 
-    # Initialize plugins.
-    plugins.init_plugins(cli_proxy, srv_proxy)
+        # Initialize plugins.
+        #plugins.init_plugins(cli_proxy, srv_proxy)
 
-    # I/O event loop.
-    asyncore.loop()
+        # I/O event loop.
+        asyncore.loop()
 

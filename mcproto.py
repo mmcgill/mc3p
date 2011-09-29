@@ -4,18 +4,27 @@ cli_msgs = [None] * 256
 srv_msgs = [None] * 256
 
 cli_msgs[0x00] = \
-srv_msgs[0x00] = defmsg(0x00,"Keep Alive",[])
+srv_msgs[0x00] = defmsg(0x00,"Keep Alive",[
+    ('id', MC_int)])
 
 cli_msgs[0x01] = defmsg(0x01,"Login Request",[
     ('proto_version',MC_int),
     ('username',MC_string),
     ('map_seed',MC_long),
-    ('dimension',MC_byte)])
+    ('nu1', MC_int),
+    ('nu2', MC_byte),
+    ('nu3', MC_byte),
+    ('nu4', MC_unsigned_byte),
+    ('nu5', MC_unsigned_byte)])
 srv_msgs[0x01] = defmsg(0x01,"Login Response",[
     ('eid',MC_int),
     ('reserved',MC_string),
     ('map_seed',MC_long),
-    ('dimension',MC_byte)])
+    ('server_mode', MC_int),
+    ('dimension', MC_byte),
+    ('difficulty', MC_byte),
+    ('world_height', MC_unsigned_byte),
+    ('max_players', MC_unsigned_byte)])
 
 cli_msgs[0x02] = defmsg(0x02,"Handshake",[
     ('username',MC_string)])
@@ -47,10 +56,17 @@ cli_msgs[0x07] = defmsg(0x07, "Use entity", [
     ('left_click',MC_bool)])
 
 srv_msgs[0x08] = defmsg(0x08, "Update health", [
-    ('health',MC_short)])
+    ('health',MC_short),
+    ('food', MC_short),
+    ('food_saturation', MC_float)])
 
 cli_msgs[0x09] = \
-srv_msgs[0x09] = defmsg(0x09, "Respawn", [])
+srv_msgs[0x09] = defmsg(0x09, "Respawn", [
+    ('world', MC_byte),
+    ('difficulty', MC_byte),
+    ('mode', MC_byte),
+    ('world_height', MC_short),
+    ('map_seed', MC_long)])
 
 cli_msgs[0x0a] = defmsg(0x0a, "Player state", [
     ('on_ground',MC_bool)])
@@ -175,6 +191,13 @@ srv_msgs[0x19] = defmsg(0x19, "Painting", [
     ('z', MC_int),
     ('type', MC_int)])
 
+srv_msgs[0x1a] = defmsg(0x1a, "Experience orb", [
+    ('eid', MC_int),
+    ('x', MC_int),
+    ('y', MC_int),
+    ('z', MC_int),
+    ('count', MC_short)])
+
 cli_msgs[0x1b] = \
 srv_msgs[0x1b] = defmsg(0x1b, "???", [
     ('d1', MC_float),
@@ -238,6 +261,23 @@ srv_msgs[0x28] = defmsg(0x28, "Entity metadata", [
     ('eid',MC_int),
     ('metadata',parse_metadata)])
 
+cli_msgs[0x29] = \
+srv_msgs[0x29] = defmsg(0x29, "Entity Effect", [
+    ('eid', MC_int),
+    ('effect_id', MC_byte),
+    ('aplifier', MC_byte),
+    ('duration', MC_short)])
+
+cli_msgs[0x2a] = \
+srv_msgs[0x2a] = defmsg(0x2a, "Remove entity effect", [
+    ('eid', MC_int),
+    ('effect_id', MC_byte)])
+
+srv_msgs[0x2b] = defmsg(0x2b, "Experience", [
+    ('curr_exp', MC_byte),
+    ('level', MC_byte),
+    ('tot_exp', MC_short)])
+
 srv_msgs[0x32] = defmsg(0x32, "Pre-chunk", [
     ('x',MC_int),
     ('z',MC_int),
@@ -282,7 +322,8 @@ srv_msgs[0x3c] = defmsg(0x3c, "Explosion", [
 
 cli_msgs[0x46] = \
 srv_msgs[0x46] = defmsg(0x46, "New/Invalid State", [
-    ('reason', MC_byte)])
+    ('reason', MC_byte),
+    ('game_mode', MC_byte)])
 
 srv_msgs[0x47] = defmsg(0x47, "Weather", [
     ('eid', MC_int),
@@ -294,7 +335,7 @@ srv_msgs[0x47] = defmsg(0x47, "Weather", [
 srv_msgs[0x64] = defmsg(0x64, "Open window", [
     ('window_id', MC_byte),
     ('inv_type', MC_byte),
-    ('window_title', MC_string8),
+    ('window_title', MC_string),
     ('num_slots', MC_byte)])
 
 cli_msgs[0x65] = \
@@ -329,6 +370,12 @@ srv_msgs[0x6a] = defmsg(0x6a, "Transaction", [
     ('action_num', MC_short),
     ('accepted', MC_bool)])
 
+srv_msgs[0x6b] = defmsg(0x6b, "Creative inventory action", [
+    ('slot', MC_short),
+    ('item_id', MC_short),
+    ('quantity', MC_short),
+    ('damage', MC_short)])
+
 cli_msgs[0x82] = \
 srv_msgs[0x82] = defmsg(0x82, "Update sign", [
     ('x', MC_int),
@@ -339,9 +386,22 @@ srv_msgs[0x82] = defmsg(0x82, "Update sign", [
     ('text3', MC_string),
     ('text4', MC_string)])
 
+cli_msgs[0x83] = \
+srv_msgs[0x83] = defmsg(0x83, "Item data", [
+    ('item_type', MC_short),
+    ('item_id', MC_short),
+    ('data', MC_item_data)])
+
 srv_msgs[0xc8] = defmsg(0xc8, "Increment statistic", [
     ('stat_id', MC_int),
     ('amount', MC_byte)])
+
+srv_msgs[0xc9] = defmsg(0xc9, "Player list item", [
+    ('name', MC_string),
+    ('online', MC_bool),
+    ('ping', MC_short)])
+
+cli_msgs[0xfe] = defmsg(0xfe, "Server List Ping", [])
 
 cli_msgs[0xff] = \
 srv_msgs[0xff] = defmsg(0xff, "Disconnect/Kick", [
