@@ -7,17 +7,89 @@ from parsing import *
 
 logger = logging.getLogger(__name__)
 
-# Map of plugin name (string) to module.
-plugins = {}
+def _plugin_call(f, *args):
+    """Call f, return (True, retval) or (False, ex)."""
+    try:
+        return True, f(*args)
+    except PluginError as e:
+        return False, e
+    except Exception as e2:
+        logger.error(traceback.format_exc())
+        return False, e
 
-# Map of plugin name (string) to argument string.
-plugin_args = {}
+class MCPlugin(object):
+    def __init__(self, name, path, argstr):
+        self.name = name
+        self.path = path
+        self.argstr = argstr
+        self.module = imp.load_source(name, path)
+        self.to_client = None
+        self.to_server = None
+        self.handlers = {}
+
+        self._load_handlers()
+
+    def _load_handlers(self):
+        # Look for catch-all message handler 'msgXX'.
+        logger.debug('loading handlers from %s' % self.module.__file__)
+
+        self._default_handler = None
+        hdlr = self.module.__dict__.get('msgXX', None)
+        if hdlr != None and inspect.isfunction(hdlr):
+            logger.debug('  found default handler')
+            self._default_handler = hdlr
+
+        # Find the remaining handler functions.
+        for f in filter(inspect.isfunction, self.module.__dict__.values()):
+            match = msg_re.match(f.__name__)
+            if not match:
+                continue
+            logger.debug('  found %s' % f.__name__)
+            msgtype = int(match.group(1),16)
+            if msgtype in self.handlers:
+                raise PluginError("Error in %s: found multiple" % \
+                                  (self.module.__file__,msgtype))
+            else:
+                self.handlers[msgtype] = f
+
+    def default_handler(self, msg, dir):
+        if self._default_handler:
+            return self._default_handler(msg, dir)
+        else:
+            return None
+
+    def init(self):
+        logger.info('initializing %s' % self.name)
+        if not self.module.__dict__.has_key('init') or \
+           not inspect.isfunction(self.module.init):
+            return
+        self.to_client = PluginClient("client",self.name)
+        self.to_server = PluginClient("server",self.name)
+        success, ret = _plugin_call(self.module.init,
+                                    self.to_client,
+                                    self.to_server,
+                                    self.argstr)
+        if not success:
+            print "Plugin '%s' failed to initialize: %s" % (self.name, e.msg)
+            self.to_client.close()
+            self.to_server.close()
+
+    def destroy(self):
+        logger.info('destroying %s' % self.name)
+        if 'destroy' in self.module.__dict__ and \
+           inspect.isfunction(self.module.destroy):
+            _plugin_call(self.module.destroy)
+        self.to_client.close()
+        self.to_server.close()
+
+# List of MCPlugin instances.
+plugins = []
 
 # Map of msgtype (int) to list of handler functions.
 handlers = {}
 
-# List of (plugin name, global handler function) pairs.
-global_handlers = []
+client_plugin_lstnr = None
+server_plugin_lstnr = None
 
 ### Exceptions ###
 class ConfigException(Exception):
@@ -58,38 +130,24 @@ def load_plugins_with_precedence():
         if len(parts) > 1:
             pname = parts[0]
             argstr = parts[1]
-        plugin_args[pname] = argstr
-        try:
-            mod = imp.load_source(pname, ppath)
-            logger.info("Loaded %s"%os.path.abspath(mod.__file__))
-        except PluginError as e:
+
+        def _load():
+            plugin = MCPlugin(pname, ppath, argstr)
+            plugins.append(plugin)
+            logger.info("Loaded %s"%os.path.abspath(plugin.module.__file__))
+
+        success, ret = _plugin_call(_load)
+        if not success:
             print "Error loading %s: %s" % (pname, str(e))
-        except:
-            logger.error("ERROR: Failed to load plugin '%s' (from plugin.conf:%d)."%(pname,lnum))
-            logger.error(traceback.format_exc())
-            continue
-        plugins[pname] = mod
 
     # Load message handlers.
-    for pname in plugins.keys():
-        if not plugins.has_key(pname):
-            continue
-        # Look for catch-all message handler 'msgXX'
-        if plugins[pname].__dict__.has_key('msgXX'):
-            msgXX = plugins[pname].__dict__['msgXX']
-            if inspect.isfunction(msgXX):
-                global_handlers.append( (pname, msgXX) )
-
+    for plugin in plugins:
         # Load message-specific handlers
-        for f in filter(inspect.isfunction, plugins[pname].__dict__.values()):
-            match = msg_re.match(f.__name__)
-            if not match:
-                continue
-            msgtype = int(match.group(1),16)
+        for msgtype, f in plugin.handlers.items():
             if not handlers.has_key(msgtype):
                 handlers[msgtype] = []
             handlers[msgtype].append(f)
-            logger.info("Registered %s.%s"%(pname,f.__name__))
+            logger.info("Registered %s.%s"%(plugin.name,f.__name__))
 
     # Process message handler sections, and re-order handlers.
     for (msgtype,lst) in hdlrs.items():
@@ -204,27 +262,50 @@ PLUGIN_SOCKET_PATH = "/tmp/mc3psock"
 
 def init_plugins(cli_proxy, srv_proxy):
     """Call plugin init() methods."""
+    global client_plugin_lstnr, server_plugin_lstnr
     client_plugin_lstnr = PluginListener(cli_proxy, "client")
     server_plugin_lstnr = PluginListener(srv_proxy, "server")
 
     # Call plugin init methods.
-    for (pname,p) in plugins.items():
-        if not p.__dict__.has_key('init') or not inspect.isfunction(p.init):
-            continue
-        c = PluginClient("client",pname)
-        s = PluginClient("server",pname)
-        init = False
-        try:
-            p.init(c, s, plugin_args[pname])
-            init = True
-        except PluginError as e:
-            print "Plugin '%s' failed to initialize: %s" % (pname, e.msg)
-        except:
-            logger.error("Plugin '%s' failed to initialize." % pname)
-            logger.error(traceback.format_exc())
-        if not init:
-            c.close()
-            s.close()
+    for plugin in plugins:
+        plugin.init()
+
+def destroy_plugins():
+    for plugin in plugins:
+        plugin.destroy()
+
+    logger.info('closing plugin listeners')
+    global client_plugin_lstnr, server_plugin_lstnr
+    client_plugin_lstnr.close()
+    server_plugin_lstnr.close()
+
+def call_handlers(packet,side):
+    """Call handlers, return True if packet should be forwarded."""
+    # Call all default handlers first.
+    for plugin in plugins:
+        if not call_handler(plugin, plugin.default_handler, packet, side):
+            return False
+
+    # Call all message-specific handlers next.
+    msgtype = packet['msgtype']
+    if not handlers.has_key(msgtype):
+        return True
+    for handler in handlers[msgtype]:
+        if not call_handler(plugin, handler, packet, side):
+            return False
+
+    # All handlers allowed message
+    return True
+
+def call_handler(plugin, handler, packet, side):
+    success, ret = _plugin_call(handler, packet, side)
+    if not success:
+        logger.info("current MC message: %s" % repr(packet))
+        print "Error in plugin %s: %s" % (plugin.name, str(e))
+    elif ret == False: # 'if not ret:' is incorrect, a None return value means 'allow'
+        return False
+    else:
+        return True
 
 class PluginListener(asyncore.dispatcher):
     """Listen for UNIX socket connections from plugins."""

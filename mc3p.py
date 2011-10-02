@@ -73,6 +73,7 @@ def create_proxies(clientsock, dsthost, dstport):
         if shutting_down[0]:
             return
         logger.warn("%s socket closed, shutting down.", side)
+        plugins.destroy_plugins()
         shutting_down[0] = True
         if cli_proxy:
             cli_proxy.close()
@@ -93,37 +94,6 @@ class UnsupportedPacketException(Exception):
     def __init__(self,pid):
         Exception.__init__(self,"Unsupported packet id 0x%x" % pid)
 
-
-def call_handlers(packet,side):
-    """Call handlers, return True if packet should be forwarded."""
-    # Call all global handlers first.
-    for (pname,hdlr) in plugins.global_handlers:
-        if not call_handler(hdlr, packet, side):
-            return False
-
-    # Call all message-specific handlers next.
-    msgtype = packet['msgtype']
-    if not plugins.handlers.has_key(msgtype):
-        return True
-    for handler in plugins.handlers[msgtype]:
-        if not call_handler(handler, packet, side):
-            return False
-
-    # All handlers allowed message
-    return True
-
-def call_handler(handler, packet, side):
-    try:
-        ret = handler(packet, side)
-        if ret == False: # 'if not ret:' is incorrect, a None return value means 'allow'
-            return False
-    except plugins.PluginError as e:
-        print "Error in plugin %s: %s" % (handler.__module__, str(e))
-    except:
-        logger.error("Exception in handler %s.%s"%(handler.__module__,handler.__name__))
-        logger.info("current MC message: %s" % repr(packet))
-        logger.error(traceback.format_exc())
-    return True
 
 class MinecraftProxy(asyncore.dispatcher):
     """Proxies a packet stream from a Minecraft client or server.
@@ -153,7 +123,7 @@ class MinecraftProxy(asyncore.dispatcher):
             packet = parse_packet(self.stream, self.msg_spec, self.side)
             while packet != None:
                 logger.debug("%s packet: %s" % (self.side,repr(packet)) )
-                if call_handlers(packet, self.side):
+                if plugins.call_handlers(packet, self.side):
                     self.dst_sock.sendall(packet['raw_bytes'])
                 # Since we know we're at a message boundary, we can inject
                 # any messages in the queue
@@ -251,17 +221,18 @@ if __name__ == "__main__":
     # Install signal handler.
     signal.signal(signal.SIGINT, sigint_handler)
 
+    plugins.load_plugins_with_precedence()
+
     while True:
         cli_sock = wait_for_client(port=34343)
 
-        #plugins.load_plugins_with_precedence()
 
         # Set up client/server main-in-the-middle.
         sleep(0.05)
         (cli_proxy, srv_proxy) = create_proxies(cli_sock, host, port)
 
         # Initialize plugins.
-        #plugins.init_plugins(cli_proxy, srv_proxy)
+        plugins.init_plugins(cli_proxy, srv_proxy)
 
         # I/O event loop.
         asyncore.loop()
