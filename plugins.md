@@ -1,6 +1,36 @@
 
 # Plugins
 
+## Design notes for next iteration
+
+* Plugin classes. A plugin module must contain exactly one
+  subclass of MC3Plugin. Each entry in the [active] section of
+  the plugin config file instantiates a plugin class, and associates
+  a unique identifier with the instance. The identifier is what should
+  appear in following [msgXX] sections. This makes it possible to
+  run multiple instances of a single plugin with different parameters.
+
+* Handler annotations. A message handler is a member function of
+  a plugin class annotated with @handler(XX), where XX is a message type.
+
+* Command-line plugin instantiation. For plugins that should be
+  started the same way for each mc3p session, the plugins config
+  file makes sense. However, some plugins (e.g. dvr) are rarely
+  started the same way repeatedly. mc3p should support a command
+  line mechanism for plugin instantiation:
+
+    --plugin class,id,"argstring"
+
+  Plugins listed earlier on the command line have higher precedence.
+  There will be no command line mechanism for per-message precedence
+  overrides.
+
+* Automatic plugin module reloading. When the --reload-plugins option
+  is specified, mc3p scans the timestamp of each plugin module file
+  periodically. When a change is detected, all instances of the given
+  plugin are destroyed, the module is reloaded, and the configured
+  instances are restarted.
+
 ## Installation and Activation
 
 To install a plugin, simply copy it to the `plugins` subdirectory of the
