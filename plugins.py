@@ -17,12 +17,34 @@ def _plugin_call(f, *args):
         logger.error(traceback.format_exc())
         return False, e
 
+def load_source(name, path):
+    """Replacement for imp.load_source().
+
+    When loading 'foo.py', imp.load_source() uses a pre-compiled
+    file ('foo.pyc' or 'foo.pyo') if its timestamp is not older than
+    that of 'foo.py'. Unfortunately, the timestamps have a resolution
+    of seconds on most platforms, so updates made to 'foo.py' within
+    a second of the imp.load_source() call may or may not be reflected
+    in the loaded module -- the behavior is non-deterministic.
+
+    This load_source() replacement deletes a pre-compiled
+    file before calling imp.load_source() if the pre-compiled file's
+    timestamp is less than or equal to the timestamp of path.
+    """
+    if os.path.exists(path):
+        for ending in ('c', 'o'):
+            compiled_path = path+ending
+            if os.path.exists(compiled_path) and \
+               os.path.getmtime(compiled_path) <= os.path.getmtime(path):
+                os.unlink(compiled_path)
+    return imp.load_source(name, path)
+
 class MCPlugin(object):
     def __init__(self, name, path, argstr):
         self.name = name
         self.path = path
         self.argstr = argstr
-        self.module = imp.load_source(name, path)
+        self.module = load_source(name, path)
         self.to_client = None
         self.to_server = None
         self.handlers = {}
