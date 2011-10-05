@@ -429,4 +429,216 @@ class PluginClient(asyncore.dispatcher):
         self.sendall(MC_short(len(msgbytes)))
         self.sendall(msgbytes)
 
+class PluginConfig(object):
+    """Store plugin configuration"""
+    def __init__(self, dir):
+        self.__dir = dir
+        self.__ids = []
+        self.__plugin_names = {} # { id -> plugin_name }
+        self.__argstrs = {} # { id -> argstr }
+        self.__orderings = {} # { msgtype -> [id1, id2, ...] }
+
+    def add(self, id, plugin_name, argstr=''):
+        if id in self.__ids:
+            raise ConfigError("Duplicate id '%s'" % id)
+        self.__ids.append(id)
+        self.__plugin_names[id] = plugin_name
+        self.__argstrs[id] = argstr
+        return self
+
+    def order(self, msgtype, id_list):
+        if len(set(id_list)) != len(id_list):
+            raise ConfigError("Duplicate ids in %s" % repr(id_list))
+        unknown_ids = set(self.__ids) - set(id_list)
+        if len(unknown_ids) > 0:
+            raise ConfigError("No such ids: %s" % repr(unknown_ids))
+        self.__orderings[msgtype] = id_list
+        return self
+
+    @property
+    def plugin_dir(self):
+        """Directory that contains plugin files."""
+        return self.__dir
+
+    @property
+    def ids(self):
+        """List of instance ids."""
+        return list(self.__ids)
+
+    @property
+    def plugins(self):
+        """Set of instantiated plugin names."""
+        return set(self.__plugin_names.values())
+
+    @property
+    def plugin(self):
+        """Map of ids to plugin names."""
+        return dict(self.__plugin_names)
+
+    @property
+    def argstr(self):
+        """Map of ids to argument strings."""
+        return dict(self.__argstrs)
+
+    def ordering(self, msgtype):
+        """Return a total ordering of instance ids for this msgtype."""
+        if not msgtype in self.__orderings:
+            return self.ids
+        else:
+            o = list(self.__orderings[msgtype])
+            for id in self.__ids:
+                if not id in o:
+                    o.append(id)
+            return o
+
+class PluginManager(object):
+    """Manage plugins for an mc3p session."""
+    def __init__(self, config, cli_proxy, srv_proxy):
+        # Map of plugin name to module.
+        self.__plugins = {}
+
+        # Map of instance ID to MC3Plugin instance.
+        self.__instances = {}
+
+        # True when a successful client-server handshake has completed.
+        self.__session_active = False
+
+        # For asynchronously injecting messages to the client or server.
+        self.__client_plugin_lstnr = PluginListener(cli_proxy, "client")
+        self.__server_plugin_lstnr = PluginListener(srv_proxy, "server")
+
+        # Plugin configuration.
+        self.__config = config
+
+    def _load_plugins(self):
+        """Load or reload all plugins."""
+        logger.info('%s loading plugins' % repr(self))
+        for pname in self.__config.plugins:
+            self._load_plugin(pname)
+
+    def _load_plugin(self, pname):
+        """Load or reload plugin pname."""
+        ppath = os.path.join(self.__config.plugin_dir, pname+'.py')
+        try:
+            logger.debug('  Loading %s at %s' % (pname, ppath))
+            self.__plugins[pname] = load_source(pname, ppath)
+        except Exception as e:
+            logger.error("Plugin %s failed to load: %s" % (pname, str(e)))
+            return
+
+    def _instantiate_all(self):
+        """Instantiate plugins based on self.__config.
+
+        Assumes plugins have already been loaded.
+        """
+        logger.info('%s instantiating plugins' % repr(self))
+        for id in self.__config.ids:
+            pname = self.__config.plugin[id]
+            if not pname in self.__plugins:
+                continue
+            else:
+                self._instantiate_one(id,pname)
+
+    def _find_plugin_class(self, pname):
+        """Return the subclass of MC3Plugin in pmod."""
+        pmod = self.__plugins[pname]
+        class_check = lambda c: \
+            c != MC3Plugin and isinstance(c, type) and issubclass(c, MC3Plugin)
+        classes = filter(class_check, pmod.__dict__.values())
+        if len(classes) == 0:
+            logger.error("Plugin '%s' does not contain a subclass of MC3Plugin" % pname)
+            return None
+        elif len(classes) > 1:
+            logger.error("Plugin '%s' contains multiple subclasses of MC3Plugin: %s" % \
+                         (pname, ', '.join([c.__name__ for c in classes])))
+        else:
+            return classes[0]
+
+    def _instantiate_one(self, id, pname):
+        """Instantiate plugin pmod with id."""
+        clazz = self._find_plugin_class(pname)
+        if None == clazz:
+            return
+        to_cli = PluginClient('client', id)
+        to_srv = PluginClient('server', id)
+        try:
+            logger.debug("  Instantiating plugin '%s' as '%s'" % (pname, id))
+            self.__instances[id] = clazz(to_cli, to_srv)
+        except Exception as e:
+            logger.error("Failed to instantiate '%s': %s" % (id, str(e)))
+            to_cli.close()
+            to_srv.close()
+
+    def destroy(self):
+        """Destroy plugin instances."""
+        self.__plugins = {}
+        logger.info("%s destroying plugin instances" % repr(self))
+        for iname in self.__instances:
+            logger.debug("  Destroying '%s'" % iname)
+            try:
+                self.__instances[iname]._destroy()
+            except:
+                logger.error("Error cleaning up instance '%s' of plugin '%s'" % \
+                             (iname, self.__config.plugin[iname]))
+                logger.error(traceback.format_exc())
+        self.__instances = {}
+        self.__client_plugin_lstnr.close()
+        self.__server_plugin_lstnr.close()
+
+    def filter(self, msg, dst):
+        """Filter msg through the configured plugins.
+
+        Returns True if msg should be forwarded, False otherwise.
+        """
+        if self.__session_active:
+            # TODO: Call plugin instance handlers.
+            return True
+        else:
+            if 'client' == dst and 0x01 == msg['msgtype']:
+                logger.info('Handshake completed, loading plugins')
+                self.__session_active = True
+                self._load_plugins()
+                self._instantiate_all()
+            return True
+
+    def __repr__(self):
+        return '<PluginManager>'
+
+class MC3Plugin(object):
+    """Base class for mc3p plugins."""
+
+    def __init__(self, to_client, to_server):
+        self.__to_client = to_client
+        self.__to_server = to_server
+
+    def init(self, args):
+        """Initialize plugin instance.
+
+        Override to provide subclass-specific initialization."""
+
+    def destroy(self):
+        """Free plugin resources.
+
+        Override in subclass."""
+
+    def _destroy(self):
+        """Internal cleanup, do not override."""
+        self.__to_client.close()
+        self.__to_server.close()
+        self.destroy()
+
+    def to_server(self, msg):
+        """Send msg to the server asynchronously."""
+        self.__to_server.inject_msg(msg)
+
+    def to_client(self, msg):
+        """Send msg to the client asynchronously."""
+        self.__to_client.inject_msg(msg)
+
+    def default_handler(self, msg, dir):
+        """Default message handler for all message types.
+
+        Override in subclass to filter all message types."""
+        return True
+
 
