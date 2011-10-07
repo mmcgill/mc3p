@@ -8,7 +8,7 @@ dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(dir)
 
 import mcproto
-import plugins
+from plugins import PluginConfig, PluginManager
 from parsing import parse_unsigned_byte
 from util import Stream, PartialPacketException
 
@@ -32,6 +32,8 @@ and forward that connection to <host>:<port>."""
                       help="Override logging.conf root log level")
     parser.add_option("-p", "--local-port", dest="locport", metavar="PORT", default="34343",
                       type="int", help="Listen on this port")
+    parser.add_option("--plugin", dest="plugins", metavar="ID:PLUGIN(ARGS)", type="string",
+                      action="append", help="Configure a plugin", default=[])
     (opts,args) = parser.parse_args()
 
     if not 1 <= len(args) <= 2:
@@ -39,6 +41,16 @@ and forward that connection to <host>:<port>."""
 
     host = args[0]
     port = 25565
+    pcfg = PluginConfig('plugin')
+    pregex = re.compile('(?P<id>\\w+):(?P<plugin_name>\\w+)(\\((?P<argstr>.*)\\))?$')
+    for pstr in opts.plugins:
+        m = pregex.match(pstr)
+        if not m:
+            logger.error('Invalid --plugin option: %s' % pstr)
+            sys.exit(1)
+        else:
+            parts = m.groupdict({'argstr': ''})
+            pcfg.add(**parts)
 
     if len(args) == 2:
         try:
@@ -46,7 +58,7 @@ and forward that connection to <host>:<port>."""
         except:
             parser.error("Invalid port '%s'" % args[1])
 
-    return (host, port, opts)
+    return (host, port, opts, pcfg)
 
 
 def wait_for_client(port):
@@ -62,33 +74,40 @@ def wait_for_client(port):
     return sock
 
 
-def create_proxies(clientsock, dsthost, dstport):
-    """Open connection to dsthost:dstport, and return client and server proxies."""
-    logger.info("creating proxy from client to %s:%d" % (dsthost,dstport))
-    srv_proxy = None
-    cli_proxy = None
-    shutting_down = [False]
-    def shutdown(side):
+class MinecraftSession(object):
+    """A client-server Minecraft session."""
+
+    def __init__(self, pcfg, clientsock, dsthost, dstport):
+        """Open connection to dsthost:dstport, and return client and server proxies."""
+        logger.info("creating proxy from client to %s:%d" % (dsthost,dstport))
+        self.srv_proxy = None
+        self.cli_proxy = None
+        self.shutting_down = False
+        try:
+            serversock = socket.create_connection( (dsthost,dstport) )
+        except Exception as e:
+            clientsock.close()
+            logger.error("Couldn't connect to %s:%d - %s", dsthost, dstport, str(e))
+            sys.exit(1)
+        self.cli_proxy = MinecraftProxy(clientsock, serversock,
+                                        mcproto.cli_msgs, self.shutdown, 'client')
+        self.srv_proxy = MinecraftProxy(serversock, clientsock,
+                                        mcproto.srv_msgs, self.shutdown, 'server')
+        self.plugin_mgr = PluginManager(pcfg, self.cli_proxy, self.srv_proxy)
+        self.cli_proxy.plugin_mgr = self.plugin_mgr
+        self.srv_proxy.plugin_mgr = self.plugin_mgr
+
+    def shutdown(self, side):
         """Close proxies and exit."""
-        if shutting_down[0]:
+        if self.shutting_down:
             return
         logger.warn("%s socket closed, shutting down.", side)
-        plugins.destroy_plugins()
-        shutting_down[0] = True
-        if cli_proxy:
-            cli_proxy.close()
-        if srv_proxy:
-            srv_proxy.close()
-    try:
-        serversock = socket.create_connection( (dsthost,dstport) )
-    except Exception as e:
-        clientsock.close()
-        logger.error("Couldn't connect to %s:%d - %s", dsthost, dstport, str(e))
-        sys.exit(1)
-    cli_proxy = MinecraftProxy(clientsock, serversock, mcproto.cli_msgs, shutdown, 'client')
-    srv_proxy = MinecraftProxy(serversock, clientsock, mcproto.srv_msgs, shutdown, 'server')
-    return (cli_proxy, srv_proxy)
-
+        self.plugin_mgr.destroy()
+        self.shutting_down = True
+        if self.cli_proxy:
+            self.cli_proxy.close()
+        if self.srv_proxy:
+            self.srv_proxy.close()
 
 class UnsupportedPacketException(Exception):
     def __init__(self,pid):
@@ -101,6 +120,7 @@ class MinecraftProxy(asyncore.dispatcher):
 
     def __init__(self, src_sock, dst_sock, msg_spec, on_shutdown, side):
         asyncore.dispatcher.__init__(self,src_sock)
+        self.plugin_mgr = None
         self.dst_sock = dst_sock
         self.msg_spec = msg_spec
         self.on_shutdown = on_shutdown
@@ -123,7 +143,7 @@ class MinecraftProxy(asyncore.dispatcher):
             packet = parse_packet(self.stream, self.msg_spec, self.side)
             while packet != None:
                 logger.debug("%s packet: %s" % (self.side,repr(packet)) )
-                if plugins.call_handlers(packet, self.side):
+                if not self.plugin_mgr or self.plugin_mgr.filter(packet, self.side):
                     self.dst_sock.sendall(packet['raw_bytes'])
                 # Since we know we're at a message boundary, we can inject
                 # any messages in the queue
@@ -206,7 +226,7 @@ datefmt=%H:%M:%S
         if f: f.close()
 
 if __name__ == "__main__":
-    (host, port, opts) = parse_args()
+    (host, port, opts, pcfg) = parse_args()
 
     # Initialize logging.
     if not os.path.exists('logging.conf'):
@@ -221,18 +241,12 @@ if __name__ == "__main__":
     # Install signal handler.
     signal.signal(signal.SIGINT, sigint_handler)
 
-    plugins.load_plugins_with_precedence()
-
     while True:
         cli_sock = wait_for_client(port=34343)
 
-
         # Set up client/server main-in-the-middle.
         sleep(0.05)
-        (cli_proxy, srv_proxy) = create_proxies(cli_sock, host, port)
-
-        # Initialize plugins.
-        plugins.init_plugins(cli_proxy, srv_proxy)
+        MinecraftSession(pcfg, cli_sock, host, port)
 
         # I/O event loop.
         asyncore.loop()
