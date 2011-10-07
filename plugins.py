@@ -596,8 +596,8 @@ class PluginManager(object):
         if self.__session_active:
             msgtype = msg['msgtype']
             for id in self.__config.ordering(msgtype):
-                inst = self.__instances[id]
-                if not inst.filter(msg, dst):
+                inst = self.__instances.get(id, None)
+                if inst and not inst.filter(msg, dst):
                     return False
             return True
         else:
