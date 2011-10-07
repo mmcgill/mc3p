@@ -563,7 +563,9 @@ class PluginManager(object):
         to_srv = PluginClient('server', id)
         try:
             logger.debug("  Instantiating plugin '%s' as '%s'" % (pname, id))
-            self.__instances[id] = clazz(to_cli, to_srv)
+            inst = clazz(to_cli, to_srv)
+            inst.init(self.__config.argstr[id])
+            self.__instances[id] = inst
         except Exception as e:
             logger.error("Failed to instantiate '%s': %s" % (id, str(e)))
             to_cli.close()
