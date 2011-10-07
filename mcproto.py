@@ -171,7 +171,8 @@ srv_msgs[0x17] = defmsg(0x17, "Add vehicle/object", [
     ('type',MC_byte),
     ('x',MC_int),
     ('y',MC_int),
-    ('z',MC_int)])
+    ('z',MC_int),
+    ('fireball_data',MC_fireball_data)])
 
 srv_msgs[0x18] = defmsg(0x18, "Mob spawn", [
     ('eid',MC_int),

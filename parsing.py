@@ -264,3 +264,22 @@ def emit_item_data(s):
 
 MC_item_data = Parsem(parse_item_data, emit_item_data)
 
+def parse_fireball_data(stream):
+    data = {}
+    data['thrower_id'] = parse_int(stream)
+    if data['thrower_id'] > 0:
+        data['u1'] = parse_short(stream)
+        data['u2'] = parse_short(stream)
+        data['u3'] = parse_short(stream)
+    return data
+
+def emit_fireball_data(data):
+    str = emit_int(data['thrower_id'])
+    if data['thrower_id'] > 0:
+        str = ''.join(str, emit_short(data['u1']),
+                           emit_short(data['u2']),
+                           emit_short(data['u3']))
+    return str
+
+MC_fireball_data = Parsem(parse_fireball_data, emit_fireball_data)
+
