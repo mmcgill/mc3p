@@ -573,17 +573,18 @@ class PluginManager(object):
 
     def destroy(self):
         """Destroy plugin instances."""
-        self.__plugins = {}
-        logger.info("%s destroying plugin instances" % repr(self))
-        for iname in self.__instances:
-            logger.debug("  Destroying '%s'" % iname)
-            try:
-                self.__instances[iname]._destroy()
-            except:
-                logger.error("Error cleaning up instance '%s' of plugin '%s'" % \
-                             (iname, self.__config.plugin[iname]))
-                logger.error(traceback.format_exc())
-        self.__instances = {}
+        if self.__session_active:
+            self.__plugins = {}
+            logger.info("%s destroying plugin instances" % repr(self))
+            for iname in self.__instances:
+                logger.debug("  Destroying '%s'" % iname)
+                try:
+                    self.__instances[iname]._destroy()
+                except:
+                    logger.error("Error cleaning up instance '%s' of plugin '%s'" % \
+                                 (iname, self.__config.plugin[iname]))
+                    logger.error(traceback.format_exc())
+            self.__instances = {}
         self.__client_plugin_lstnr.close()
         self.__server_plugin_lstnr.close()
 
