@@ -123,7 +123,7 @@ srv_msgs[0x10] = defmsg(0x10, "Held item selection",[
     ('slot_id', MC_short)])
 
 srv_msgs[0x11] = defmsg(0x11, "Use bed", [
-    ('eid', MC_short),
+    ('eid', MC_int),
     ('in_bed', MC_bool),
     ('x', MC_int),
     ('y', MC_byte),
