@@ -604,12 +604,51 @@ class PluginManager(object):
     def __repr__(self):
         return '<PluginManager>'
 
+class MsgHandlerWrapper(object):
+    def __init__(self, msgtypes, method):
+        for msgtype in msgtypes:
+            if None == mcproto.cli_msgs[msgtype] and \
+               None == mcproto.srv_msgs[msgtype]:
+                raise PluginError('Unrecognized message type %x' % msgtype)
+        self.msgtypes = msgtypes
+        self.method = method
+
+    def __call__(*args, **kargs):
+        self.method(*args, **kargs)
+
+def msghdlr(*msgtypes):
+    def wrapper(f):
+        return MsgHandlerWrapper(msgtypes, f)
+    return wrapper
+
 class MC3Plugin(object):
     """Base class for mc3p plugins."""
 
     def __init__(self, to_client, to_server):
         self.__to_client = to_client
         self.__to_server = to_server
+        self.__hdlrs = {}
+        self._collect_msg_hdlrs()
+
+    def _collect_msg_hdlrs(self):
+        wrappers = filter(lambda x: isinstance(x, MsgHandlerWrapper),
+                          self.__class__.__dict__.values())
+        print repr(self.__class__.__dict__.values())
+        for wrapper in wrappers:
+            self._unwrap_hdlr(wrapper)
+
+    def _unwrap_hdlr(self, wrapper):
+        hdlr = wrapper.method
+        name = hdlr.__name__
+        for msgtype in wrapper.msgtypes:
+            if msgtype in self.__hdlrs:
+                othername = self.__hdlrs[msgtype].__name__
+                raise PluginError('Multiple handlers for %x: %s, %s' % \
+                                  (msgtype, othername, name))
+            else:
+                self.__hdlrs[msgtype] = hdlr
+                logger.debug('  registered handler %s for %x' % (name, msgtype))
+
 
     def init(self, args):
         """Initialize plugin instance.

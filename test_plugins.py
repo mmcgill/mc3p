@@ -1,6 +1,6 @@
 import unittest, shutil, tempfile, os, os.path, logging
 
-from plugins import PluginConfig, PluginManager, load_source
+from plugins import PluginConfig, PluginManager, load_source, MC3Plugin, msghdlr
 
 MOCK_PLUGIN_CODE = """
 from plugins import MC3Plugin
@@ -108,7 +108,20 @@ class TestPluginManager(unittest.TestCase):
                           'difficulty': 2, 'world_height': 128, 'max_players': 16},
                          'client')
         self.assertEqual(2, len(mockplugin.instances))
-        
+
+    def testMessageHandlerRegistration(self):
+        class A(MC3Plugin):
+            @msghdlr(0x01, 0x02, 0x03)
+            def hdlr1(self, msg, dir): pass
+            @msghdlr(0x04)
+            def hdlr2(self, msg, dir): pass
+        a = A(None, None)
+        hdlrs = getattr(a, '_MC3Plugin__hdlrs')
+        for msgtype in (0x01, 0x02, 0x03, 0x04):
+            self.assertTrue(msgtype in hdlrs)
+        self.assertEquals('hdlr1', hdlrs[0x01].__name__)
+        self.assertEquals('hdlr2', hdlrs[0x04].__name__)
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     unittest.main()
