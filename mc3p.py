@@ -232,10 +232,8 @@ if __name__ == "__main__":
     if not os.path.exists('logging.conf'):
         write_default_logging_file()
     logging.config.fileConfig('logging.conf')
-    #logging.basicConfig(level=logging.INFO)
 
     if opts.loglvl:
-        print opts.loglvl
         logging.root.setLevel(getattr(logging, opts.loglvl.upper()))
 
     # Install signal handler.
