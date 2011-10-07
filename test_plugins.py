@@ -3,7 +3,7 @@ import unittest, shutil, tempfile, os, os.path, logging
 from plugins import PluginConfig, PluginManager, load_source, MC3Plugin, msghdlr
 
 MOCK_PLUGIN_CODE = """
-from plugins import MC3Plugin
+from plugins import MC3Plugin, msghdlr
 
 print 'Initializing mockplugin.py'
 instances = []
@@ -17,6 +17,8 @@ class MockPlugin(MC3Plugin):
         instances.append(self)
         self.initialized = False
         self.destroyed = False
+        self.drop_next_msg = False
+        self.last_msg = None
 
     def init(self, args):
         self.initialized = True
@@ -29,6 +31,14 @@ class MockPlugin(MC3Plugin):
         if fail_on_destroy:
             raise Exception('Failure!')
 
+    @msghdlr(0x03)
+    def handle_chat(self, msg, dest):
+        self.last_msg = msg
+        if self.drop_next_msg:
+            self.drop_next_msg = False
+            return False
+        else:
+            return True
 """
     
 class MockMinecraftProxy(object):
@@ -97,16 +107,17 @@ class TestPluginManager(unittest.TestCase):
         self.pmgr._instantiate_all()
         self.assertEqual(0, len(mockplugin.instances))
 
+    handshake_msg = {'msgtype':0x01, 'eid': 1, 'reserved': '',
+                     'map_seed': 42, 'server_mode': 0, 'dimension': 0,
+                     'difficulty': 2, 'world_height': 128, 'max_players': 16}
+
     def testInstantiationAfterSuccessfulHandshake(self):
         mockplugin = self._write_and_load('mockplugin', MOCK_PLUGIN_CODE)
         pcfg = PluginConfig(self.pdir).add('p1', 'mockplugin').add('p2', 'mockplugin')
         self.pmgr = PluginManager(pcfg, self.cli_proxy, self.srv_proxy)
         self.assertEqual(0, len(mockplugin.instances))
 
-        self.pmgr.filter({'msgtype':0x01, 'eid': 1, 'reserved': '',
-                          'map_seed': 42, 'server_mode': 0, 'dimension': 0,
-                          'difficulty': 2, 'world_height': 128, 'max_players': 16},
-                         'client')
+        self.pmgr.filter(self.__class__.handshake_msg, 'client')
         self.assertEqual(2, len(mockplugin.instances))
 
     def testMessageHandlerRegistration(self):
@@ -121,6 +132,26 @@ class TestPluginManager(unittest.TestCase):
             self.assertTrue(msgtype in hdlrs)
         self.assertEquals('hdlr1', hdlrs[0x01].__name__)
         self.assertEquals('hdlr2', hdlrs[0x04].__name__)
+
+    def testMessageHandlerFiltering(self):
+        mockplugin = self._write_and_load('mockplugin', MOCK_PLUGIN_CODE)
+        pcfg = PluginConfig(self.pdir).add('p1', 'mockplugin').add('p2', 'mockplugin')
+        self.pmgr = PluginManager(pcfg, self.cli_proxy, self.srv_proxy)
+        self.pmgr.filter(self.__class__.handshake_msg, 'client')
+        p1 = mockplugin.instances[0]
+        p2 = mockplugin.instances[1]
+        msg = {'msgtype': 0x03, 'chat_msg': 'foo!'}
+
+        self.assertTrue(self.pmgr.filter(msg, 'client'))
+        self.assertEquals(msg, p1.last_msg)
+        self.assertEquals(msg, p2.last_msg)
+
+        p1.drop_next_msg = True
+        self.assertFalse(self.pmgr.filter({'msgtype': 0x03, 'chat_msg': 'bar!'}, 'server'))
+        self.assertEquals(msg, p2.last_msg)
+
+        p1.drop_next_msg = True
+        self.assertTrue(self.pmgr.filter({'msgtype': 0x04, 'time': 42}, 'client'))
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

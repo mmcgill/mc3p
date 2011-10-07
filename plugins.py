@@ -591,7 +591,11 @@ class PluginManager(object):
         Returns True if msg should be forwarded, False otherwise.
         """
         if self.__session_active:
-            # TODO: Call plugin instance handlers.
+            msgtype = msg['msgtype']
+            for id in self.__config.ordering(msgtype):
+                inst = self.__instances[id]
+                if not inst.filter(msg, dst):
+                    return False
             return True
         else:
             if 'client' == dst and 0x01 == msg['msgtype']:
@@ -679,5 +683,19 @@ class MC3Plugin(object):
 
         Override in subclass to filter all message types."""
         return True
+
+    def filter(self, msg, dir):
+        """Filter msg via the appropriate message handler(s).
+
+        Returns True to forward msg on, False to drop it.
+        Modifications to msg are passed on to the recipient.
+        """
+        msgtype = msg['msgtype']
+        if not self.default_handler(msg, dir):
+            return False
+        elif msgtype in self.__hdlrs:
+            return self.__hdlrs[msgtype](self, msg, dir)
+        else:
+            return True
 
 
