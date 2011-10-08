@@ -11,6 +11,7 @@ import mcproto
 from plugins import PluginConfig, PluginManager
 from parsing import parse_unsigned_byte
 from util import Stream, PartialPacketException
+import util
 
 logger = logging.getLogger("mc3p")
 
@@ -181,57 +182,10 @@ def parse_packet(stream, msg_spec, side):
     return msg
 
 
-def write_default_logging_file():
-    """Write a default logging.conf."""
-    contents="""
-[loggers]
-keys=root,mc3p,plugins,parsing
-
-[handlers]
-keys=consoleHdlr
-
-[formatters]
-keys=defaultFormatter
-
-[logger_root]
-level=WARN
-handlers=consoleHdlr
-
-[logger_mc3p]
-handlers=
-qualname=mc3p
-
-[logger_plugins]
-handlers=
-qualname=plugins
-
-[logger_parsing]
-handlers=
-qualname=parsing
-
-[handler_consoleHdlr]
-class=StreamHandler
-formatter=defaultFormatter
-args=(sys.stdout,)
-
-[formatter_defaultFormatter]
-format=%(levelname)s|%(asctime)s|%(name)s - %(message)s
-datefmt=%H:%M:%S
-"""
-    f=None
-    try:
-        f=open("logging.conf","w")
-        f.write(contents)
-    finally:
-        if f: f.close()
-
 if __name__ == "__main__":
     (host, port, opts, pcfg) = parse_args()
 
-    # Initialize logging.
-    if not os.path.exists('logging.conf'):
-        write_default_logging_file()
-    logging.config.fileConfig('logging.conf')
+    util.config_logging()
 
     if opts.loglvl:
         logging.root.setLevel(getattr(logging, opts.loglvl.upper()))

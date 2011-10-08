@@ -1,4 +1,4 @@
-
+import os.path, logging, logging.config
 
 class PartialPacketException(Exception):
     """Thrown during parsing when not a complete packet is not available."""
@@ -44,5 +44,61 @@ class Stream(object):
     def __len__(self):
         return len(self.buf) - self.i
 
+def write_default_logging_file(lpath):
+    """Write a default logging.conf."""
+    contents="""
+[loggers]
+keys=root,mc3p,plugins,parsing
 
+[handlers]
+keys=consoleHdlr
+
+[formatters]
+keys=defaultFormatter
+
+[logger_root]
+level=WARN
+handlers=consoleHdlr
+
+[logger_mc3p]
+handlers=
+qualname=mc3p
+
+[logger_plugins]
+handlers=
+qualname=plugins
+
+[logger_parsing]
+handlers=
+qualname=parsing
+
+[handler_consoleHdlr]
+class=StreamHandler
+formatter=defaultFormatter
+args=(sys.stdout,)
+
+[formatter_defaultFormatter]
+format=%(levelname)s|%(asctime)s|%(name)s - %(message)s
+datefmt=%H:%M:%S
+"""
+    f=None
+    try:
+        f=open(lpath,"w")
+        f.write(contents)
+    finally:
+        if f: f.close()
+
+logging_configured = False
+
+def config_logging():
+    """Configure logging. Can safely be called multiple times."""
+    global logging_configured
+    if not logging_configured:
+        dir = os.path.dirname(os.path.abspath(__file__))
+        lpath = os.path.join(dir, 'logging.conf')
+        if not os.path.exists(lpath):
+            write_default_logging_file(lpath)
+        logging.config.fileConfig(lpath)
+        #logging.basicConfig(level=logging.INFO)
+        logging_configured = True
 
