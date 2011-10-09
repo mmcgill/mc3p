@@ -220,6 +220,10 @@ class PluginManager(object):
         # True when a successful client-server handshake has completed.
         self.__session_active = False
 
+        # Stores handshake messages before handshake has completed,
+        # so they can be fed to plugins after initialization.
+        self.__msgbuf = []
+
         # For asynchronously injecting messages to the client or server.
         self.__client_plugin_lstnr = PluginListener(cli_proxy, "client")
         self.__server_plugin_lstnr = PluginListener(srv_proxy, "server")
@@ -311,19 +315,27 @@ class PluginManager(object):
         Returns True if msg should be forwarded, False otherwise.
         """
         if self.__session_active:
-            msgtype = msg['msgtype']
-            for id in self.__config.ordering(msgtype):
-                inst = self.__instances.get(id, None)
-                if inst and not inst.filter(msg, dst):
-                    return False
-            return True
+            if self.__msgbuf:
+                for (_msg, _dst) in self.__msgbuf:
+                    self._call_plugins(_msg, _dst)
+                self.__msgbuf = None
+            return self._call_plugins(msg, dst)
         else:
             if 'client' == dst and 0x01 == msg['msgtype']:
                 logger.info('Handshake completed, loading plugins')
                 self.__session_active = True
                 self._load_plugins()
                 self._instantiate_all()
+            self.__msgbuf.append( (msg, dst) )
             return True
+
+    def _call_plugins(self, msg, dst):
+        msgtype = msg['msgtype']
+        for id in self.__config.ordering(msgtype):
+            inst = self.__instances.get(id, None)
+            if inst and not inst.filter(msg, dst):
+                return False
+        return True
 
     def __repr__(self):
         return '<PluginManager>'
