@@ -48,7 +48,7 @@ class DVRPlugin(MC3Plugin):
         self.parse_plugin_args(args)
         logger.info('initialized')
         logger.debug('cli_msgs=%s, srv_msgs=%s' % \
-                     (repr(cli_msgs), repr(srv_msgs)))
+                     (repr(self.cli_msgs), repr(self.srv_msgs)))
         self.t0 = time.time()
 
     def parse_plugin_args(self, argstr):
@@ -75,12 +75,12 @@ class DVRPlugin(MC3Plugin):
         if opts.cli_msgs == '*':
             self.all_cli_msgs = True
         elif opts.cli_msgs != '':
-            self.cli_msgs = set([msg_id(s) for s in opts.cli_msgs.split(',')])
+            self.cli_msgs = set([self.msg_id(s) for s in opts.cli_msgs.split(',')])
 
         if opts.srv_msgs == '*':
             self.all_srv_msgs = True
         elif opts.srv_msgs != '':
-            self.srv_msgs = set([msg_id(s) for s in opts.srv_msgs.split(',')])
+            self.srv_msgs = set([self.msg_id(s) for s in opts.srv_msgs.split(',')])
         # Always capture the disconnect messages.
         self.cli_msgs.add(0xff)
         self.srv_msgs.add(0xff)
@@ -100,8 +100,9 @@ class DVRPlugin(MC3Plugin):
         pid = msg['msgtype']
         if 'client' == dir and (self.all_cli_msgs or pid in self.cli_msgs):
             self.record_msg(msg, self.cli_msgfile)
-        if 'server' == dir and self.all_srv_msgs or pid in self.srv_msgs):
+        if 'server' == dir and (self.all_srv_msgs or pid in self.srv_msgs):
             self.record_msg(msg, self.srv_msgfile)
+        return True
 
     def record_msg(self, msg, file):
         t = time.time() - self.t0
