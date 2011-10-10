@@ -53,10 +53,6 @@ class DVRPlugin(MC3Plugin):
 
     def parse_plugin_args(self, argstr):
         parser = DVROptParser()
-        parser.add_option('--cli-file', dest='cli_file', default=None,
-                          metavar='PATH', help='client capture file')
-        parser.add_option('--srv-file', dest='srv_file', default=None,
-                          metavar='PATH', help='server capture file')
         parser.add_option('-c', '--from-client', dest='cli_msgs',
                           default='', metavar='MSGS',
                           help='comma-delimited list of client message IDs')
@@ -66,8 +62,12 @@ class DVRPlugin(MC3Plugin):
         # TODO: Add append/overwrite options.
 
         (opts, args) = parser.parse_args(argstr.split(' '))
-        if len(args) > 0:
-            raise PluginError("Unexpected arguments '%s'" % args)
+        if len(args) == 0:
+            raise PluginError("Missing capture file")
+        elif len(args) > 1:
+            raise PluginError("Unexpected arguments '%s'" % repr(args[1:]))
+        else:
+            capfile = args[0]
 
         if opts.cli_msgs == '' and opts.srv_msgs == '':
             raise PluginError("Must supply either --cli-msgs or --srv-msgs")
@@ -85,9 +85,9 @@ class DVRPlugin(MC3Plugin):
         self.cli_msgs.add(0xff)
         self.srv_msgs.add(0xff)
 
-        self.cli_msgfile = open(opts.cli_file, 'w')
+        self.cli_msgfile = open(capfile+'.cli', 'w')
         try:
-            self.srv_msgfile = open(opts.srv_file, 'w')
+            self.srv_msgfile = open(capfile+'.srv', 'w')
         except:
             self.cli_msgfile.close()
 
@@ -202,7 +202,7 @@ class MockClient(MockServer):
 
 def playback():
     # Parse arguments.
-    opts = parse_args()
+    opts, capfile = parse_args()
 
     # Override plugin.dvr log level with command-line option
     if opts.loglvl:
@@ -210,9 +210,9 @@ def playback():
 
     # Open server message file.
     try:
-        srv_msgfile = open(opts.srv_msgfile, 'r')
+        srv_msgfile = open(capfile+'.srv', 'r')
     except Exception as e:
-        print "Could not open %s: %s" % (opts.srv_msgfile, str(e))
+        print "Could not open %s: %s" % (capfile+'.srv', str(e))
         sys.exit(1)
 
     # Start listener, which will associate MockServer with socket on client connect.
@@ -222,7 +222,7 @@ def playback():
 
     # Open client message file.
     try:
-        cli_msgfile = open(opts.cli_msgfile, 'r')
+        cli_msgfile = open(capfile+'.cli', 'r')
     except Exception as e:
         print "Could not open %s: %s" % (opts.cli_msgfile, str(e))
         sys.exit(1)
@@ -239,17 +239,20 @@ def playback():
 def parse_args():
     parser = make_arg_parser()
     (opts, args) = parser.parse_args()
-    if len(args) != 0:
-        parser.error("Unexpected arguments %s" % args)
+    if len(args) == 0:
+        print "Missing argument CAPFILE"
+        sys.exit(1)
+    elif len(args) > 1:
+        print "Unexpected arguments %s" % repr(opts.args[1:])
+    else:
+        capfile = args[0]
 
-    check_path(parser, opts.srv_msgfile, "--srv required")
-    check_path(parser, opts.cli_msgfile, "--cli required")
+    check_path(parser, capfile+'.srv')
+    check_path(parser, capfile+'.cli')
 
-    return opts
+    return opts, capfile
 
-def check_path(parser, path, msg):
-    if not path:
-        parser.error(msg)
+def check_path(parser, path):
     if not os.path.exists(path):
         print "No such file '%s'" % path
         sys.exit(1)
@@ -272,17 +275,17 @@ def parse_addr(addr):
 
 def make_arg_parser():
     parser = optparse.OptionParser(
-        usage="usage: %prog [--to [HOST:]PORT] [--via [HOST:]PORT] [-x FACTOR] --srv SRV_FILE --cli CLI_FILE")
+        usage="usage: %prog [--to [HOST:]PORT] [--via [HOST:]PORT] " +\
+              "[-x FACTOR] CAPFILE")
     parser.add_option('--via', dest='mc3p_addr',
-        type='string', metavar='[HOST:]PORT', help='mc3p address', default='localhost:34343')
-    parser.add_option('--to', dest='srv_addr',
-        type='string', metavar='[HOST:]PORT', help='server address', default='localhost:25565')
+                      type='string', metavar='[HOST:]PORT',
+                      help='mc3p address', default='localhost:34343')
+    parser.add_option('--to', dest='srv_addr', type='string',
+                      metavar='[HOST:]PORT', help='server address',
+                      default='localhost:25565')
     parser.add_option('-x', '--timescale', dest='timescale', type='float',
-        metavar='FACTOR', help='scale time between messages by FACTOR', default=1.0)
-    parser.add_option('--srv', dest='srv_msgfile', type='string', metavar='SRV_FILE',
-        help='path to server message file', default=None)
-    parser.add_option('--cli', dest='cli_msgfile', type='string', metavar='CLI_FILE',
-        help='path to client message file', default=None)
+                      metavar='FACTOR', default=1.0,
+                      help='scale time between messages by FACTOR')
     parser.add_option("-l", "--log-level", dest="loglvl", metavar="LEVEL",
                       choices=["debug","info","warn","error"], default=None,
                       help="Override logging.conf root log level")
