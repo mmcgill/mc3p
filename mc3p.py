@@ -194,7 +194,7 @@ if __name__ == "__main__":
     signal.signal(signal.SIGINT, sigint_handler)
 
     while True:
-        cli_sock = wait_for_client(port=34343)
+        cli_sock = wait_for_client(opts.locport)
 
         # Set up client/server main-in-the-middle.
         sleep(0.05)
