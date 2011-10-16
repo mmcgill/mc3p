@@ -168,6 +168,11 @@ class MinecraftProxy(asyncore.dispatcher):
     def inject_msg(self, bytes):
         self.msg_queue.append(bytes)
 
+    def writable(self):
+        # Tell asyncore that we're not interested in write events. Without this,
+        # asyncore.loop() will peg a CPU a 100%.
+        return False
+
 
 def parse_packet(stream, msg_spec, side):
     """Parse a single packet out of stream, and return it."""
