@@ -321,6 +321,13 @@ srv_msgs[0x3c] = defmsg(0x3c, "Explosion", [
     ('unknown', MC_float),
     ('records', MC_explosion_records)])
 
+srv_msgs[0x3d] = defmsg(0x3d, "Sound effect", [
+    ('effect_id', MC_int),
+    ('x', MC_int),
+    ('y', MC_byte),
+    ('z', MC_int),
+    ('data', MC_int)])
+
 cli_msgs[0x46] = \
 srv_msgs[0x46] = defmsg(0x46, "New/Invalid State", [
     ('reason', MC_byte),
