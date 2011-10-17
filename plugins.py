@@ -280,8 +280,8 @@ class PluginManager(object):
         clazz = self._find_plugin_class(pname)
         if None == clazz:
             return
-        to_cli = PluginClient('client', id)
-        to_srv = PluginClient('server', id)
+        to_srv = PluginClient('client', id)
+        to_cli = PluginClient('server', id)
         try:
             logger.debug("  Instantiating plugin '%s' as '%s'" % (pname, id))
             inst = clazz(to_cli, to_srv)
