@@ -143,7 +143,6 @@ class MinecraftProxy(asyncore.dispatcher):
         try:
             packet = parse_packet(self.stream, self.msg_spec, self.side)
             while packet != None:
-                logger.debug("%s packet: %s" % (self.side,repr(packet)) )
                 if not self.plugin_mgr or self.plugin_mgr.filter(packet, self.side):
                     self.dst_sock.sendall(packet['raw_bytes'])
                 # Since we know we're at a message boundary, we can inject
