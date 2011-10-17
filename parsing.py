@@ -10,11 +10,11 @@ class Parsem(object):
         setattr(self,'emit',emitter)
 
     def __call__(self,arg):
-        if hasattr(arg,'read') and callable(arg.read):
-            # arg is a stream, and we're parsing
+        try:
+            # Fast path: assume we're parsing.
             return self.parse(arg)
-        else:
-            # Assume we're emitting.
+        except AttributeError:
+            # Parsing didn't work, we must be emitting.
             return self.emit(arg)
 
 def parse_byte(stream):
