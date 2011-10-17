@@ -423,11 +423,23 @@ class MC3Plugin(object):
         Modifications to msg are passed on to the recipient.
         """
         msgtype = msg['msgtype']
-        if not self.default_handler(msg, dir):
-            return False
-        elif msgtype in self.__hdlrs:
-            return self.__hdlrs[msgtype](self, msg, dir)
-        else:
+        try:
+            if not self.default_handler(msg, dir):
+                return False
+        except:
+            logger.error('Error in default handler of plugin %s:\n%s' % \
+                         (self.__class__.__name__, traceback.format_exc()))
+            return True
+
+        try:
+            if msgtype in self.__hdlrs:
+                return self.__hdlrs[msgtype](self, msg, dir)
+            else:
+                return True
+        except:
+            hdlr = self.__hdlrs[msgtype]
+            logger.error('Error in handler %s of plugin %s: %s' % \
+                         (hdlr.__name__, self.__class__.__name__, traceback.format_exc()))
             return True
 
 
