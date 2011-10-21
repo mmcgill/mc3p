@@ -74,13 +74,22 @@ class TestPluginManager(unittest.TestCase):
 
     def testInstantiation(self):
         mockplugin = self._write_and_load('mockplugin', MOCK_PLUGIN_CODE)
-        pcfg = PluginConfig(self.pdir).add('p1', 'mockplugin').add('p2', 'mockplugin')
+        pcfg = PluginConfig(self.pdir).add('mockplugin', 'p1').add('mockplugin', 'p2')
         self.pmgr = PluginManager(pcfg, self.cli_proxy, self.srv_proxy)
         self.pmgr._load_plugins()
         self.pmgr._instantiate_all()
         self.assertEqual(2, len(mockplugin.instances))
-        self.assertFalse(mockplugin.instances[0].initialized)
-        self.assertFalse(mockplugin.instances[1].initialized)
+        self.assertTrue(mockplugin.instances[0].initialized)
+        self.assertTrue(mockplugin.instances[1].initialized)
+
+    def testDefaultPluginIds(self):
+        pcfg = PluginConfig(self.pdir).add('mockplugin')
+        self.assertEqual('mockplugin', pcfg.ids[0])
+
+        pcfg.add('mockplugin')
+        pcfg.add('mockplugin')
+        self.assertEqual('mockplugin1', pcfg.ids[1])
+        self.assertEqual('mockplugin2', pcfg.ids[2])
 
     def testEmptyPluginConfig(self):
         mockplugin = self._write_and_load('mockplugin', MOCK_PLUGIN_CODE)
@@ -92,7 +101,7 @@ class TestPluginManager(unittest.TestCase):
         
     def testMissingPluginClass(self):
         self._write_and_load('empty', 'from plugins import MC3Plugin\n')
-        pcfg = PluginConfig(self.pdir).add('p', 'empty')
+        pcfg = PluginConfig(self.pdir).add('empty', 'p')
         self.pmgr = PluginManager(pcfg, self.cli_proxy, self.srv_proxy)
         self.pmgr._load_plugins()
         # Should log an error, but not raise an exception.
@@ -101,7 +110,7 @@ class TestPluginManager(unittest.TestCase):
     def testMultiplePluginClasses(self):
         code = MOCK_PLUGIN_CODE + "class AnotherPlugin(MC3Plugin): pass"
         mockplugin = self._write_and_load('mockplugin', code)
-        pcfg = PluginConfig(self.pdir).add('p', 'mockplugin')
+        pcfg = PluginConfig(self.pdir).add('mockplugin', 'p')
         self.pmgr = PluginManager(pcfg, self.cli_proxy, self.srv_proxy)
         self.pmgr._load_plugins()
         self.pmgr._instantiate_all()
@@ -113,7 +122,7 @@ class TestPluginManager(unittest.TestCase):
 
     def testInstantiationAfterSuccessfulHandshake(self):
         mockplugin = self._write_and_load('mockplugin', MOCK_PLUGIN_CODE)
-        pcfg = PluginConfig(self.pdir).add('p1', 'mockplugin').add('p2', 'mockplugin')
+        pcfg = PluginConfig(self.pdir).add('mockplugin', 'p1').add('mockplugin', 'p2')
         self.pmgr = PluginManager(pcfg, self.cli_proxy, self.srv_proxy)
         self.assertEqual(0, len(mockplugin.instances))
 
@@ -135,7 +144,7 @@ class TestPluginManager(unittest.TestCase):
 
     def testMessageHandlerFiltering(self):
         mockplugin = self._write_and_load('mockplugin', MOCK_PLUGIN_CODE)
-        pcfg = PluginConfig(self.pdir).add('p1', 'mockplugin').add('p2', 'mockplugin')
+        pcfg = PluginConfig(self.pdir).add('mockplugin', 'p1').add('mockplugin', 'p2')
         self.pmgr = PluginManager(pcfg, self.cli_proxy, self.srv_proxy)
         self.pmgr.filter(self.__class__.handshake_msg, 'client')
         p1 = mockplugin.instances[0]

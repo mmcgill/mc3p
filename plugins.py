@@ -155,7 +155,17 @@ class PluginConfig(object):
         self.__argstrs = {} # { id -> argstr }
         self.__orderings = {} # { msgtype -> [id1, id2, ...] }
 
-    def add(self, id, plugin_name, argstr=''):
+    def __default_id(self, plugin_name):
+        id = plugin_name
+        i = 1
+        while id in self.__ids:
+            id = plugin_name + str(i)
+            i += 1
+        return id
+
+    def add(self, plugin_name, id=None, argstr=''):
+        if id is None:
+            id = self.__default_id(plugin_name)
         if id in self.__ids:
             raise ConfigError("Duplicate id '%s'" % id)
         self.__ids.append(id)

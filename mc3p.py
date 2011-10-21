@@ -43,14 +43,15 @@ and forward that connection to <host>:<port>."""
     host = args[0]
     port = 25565
     pcfg = PluginConfig('plugin')
-    pregex = re.compile('(?P<id>\\w+):(?P<plugin_name>\\w+)(\\((?P<argstr>.*)\\))?$')
+    pregex = re.compile('((?P<id>\\w+):)?(?P<plugin_name>\\w+)(\\((?P<argstr>.*)\\))?$')
     for pstr in opts.plugins:
         m = pregex.match(pstr)
         if not m:
             logger.error('Invalid --plugin option: %s' % pstr)
             sys.exit(1)
         else:
-            parts = m.groupdict({'argstr': ''})
+            parts = {'argstr': ''}
+            parts.update(m.groupdict())
             pcfg.add(**parts)
 
     if len(args) == 2:
