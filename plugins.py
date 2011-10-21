@@ -369,7 +369,6 @@ class MC3Plugin(object):
     def _collect_msg_hdlrs(self):
         wrappers = filter(lambda x: isinstance(x, MsgHandlerWrapper),
                           self.__class__.__dict__.values())
-        print repr(self.__class__.__dict__.values())
         for wrapper in wrappers:
             self._unwrap_hdlr(wrapper)
 
