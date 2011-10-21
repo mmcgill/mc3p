@@ -30,7 +30,7 @@ def load_source(name, path):
     return imp.load_source(name, path)
 
 ### Exceptions ###
-class ConfigException(Exception):
+class ConfigError(Exception):
     def __init__(self,msg):
         Exception.__init__(self)
         self.msg = msg
