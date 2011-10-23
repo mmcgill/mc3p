@@ -4,10 +4,7 @@ import traceback, tempfile
 from time import time, sleep
 from optparse import OptionParser
 
-dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(dir)
-
-import mcproto
+import messages
 from plugins import PluginConfig, PluginManager
 from parsing import parse_unsigned_byte
 from util import Stream, PartialPacketException
@@ -19,6 +16,10 @@ def sigint_handler(signum, stack):
     print "Received signal %d, shutting down" % signum
     sys.exit(0)
 
+
+def get_plugin_dir():
+    """Returns the plugin directory."""
+    return os.path.join(os.path.dirname(__file__), 'plugin')
 
 def parse_args():
     """Return host and port, or print usage and exit."""
@@ -42,7 +43,7 @@ and forward that connection to <host>:<port>."""
 
     host = args[0]
     port = 25565
-    pcfg = PluginConfig('plugin')
+    pcfg = PluginConfig(get_plugin_dir())
     pregex = re.compile('((?P<id>\\w+):)?(?P<plugin_name>\\w+)(\\((?P<argstr>.*)\\))?$')
     for pstr in opts.plugins:
         m = pregex.match(pstr)
@@ -92,9 +93,9 @@ class MinecraftSession(object):
             logger.error("Couldn't connect to %s:%d - %s", dsthost, dstport, str(e))
             sys.exit(1)
         self.cli_proxy = MinecraftProxy(clientsock, serversock,
-                                        mcproto.cli_msgs, self.shutdown, 'client')
+                                        messages.cli_msgs, self.shutdown, 'client')
         self.srv_proxy = MinecraftProxy(serversock, clientsock,
-                                        mcproto.srv_msgs, self.shutdown, 'server')
+                                        messages.srv_msgs, self.shutdown, 'server')
         self.plugin_mgr = PluginManager(pcfg, self.cli_proxy, self.srv_proxy)
         self.cli_proxy.plugin_mgr = self.plugin_mgr
         self.srv_proxy.plugin_mgr = self.plugin_mgr

@@ -26,7 +26,7 @@ if __name__ == "__main__":
     mc3p_dir = os.path.dirname(os.path.abspath(os.path.join(__file__,'..')))
     sys.path.append(mc3p_dir)
 
-from plugins import PluginError, MC3Plugin, msghdlr
+from mc3p.plugins import PluginError, MC3Plugin, msghdlr
 
 logger = logging.getLogger('plugin.dvr')
 

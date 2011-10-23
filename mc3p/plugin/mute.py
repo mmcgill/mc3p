@@ -1,5 +1,5 @@
 
-from plugins import MC3Plugin, msghdlr
+from mc3p.plugins import MC3Plugin, msghdlr
 
 class MutePlugin(MC3Plugin):
     """Lets the client mute players, hiding their chat messages.

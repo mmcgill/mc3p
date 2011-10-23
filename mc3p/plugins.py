@@ -1,5 +1,5 @@
 import re, asyncore, os, socket, logging, traceback, imp, inspect
-import mcproto
+import messages
 from util import Stream, PartialPacketException
 from parsing import *
 
@@ -117,9 +117,9 @@ class PluginClient(asyncore.dispatcher):
 
         suffix is 'client' or 'server', and plugin is the plugin's name."""
         if 'client' == suffix:
-            self.msg_spec = mcproto.cli_msgs
+            self.msg_spec = messages.cli_msgs
         else:
-            self.msg_spec = mcproto.srv_msgs
+            self.msg_spec = messages.srv_msgs
         asyncore.dispatcher.__init__(self)
         self.create_socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.connect(PLUGIN_SOCKET_PATH+"-"+suffix)
@@ -353,8 +353,8 @@ class PluginManager(object):
 class MsgHandlerWrapper(object):
     def __init__(self, msgtypes, method):
         for msgtype in msgtypes:
-            if None == mcproto.cli_msgs[msgtype] and \
-               None == mcproto.srv_msgs[msgtype]:
+            if None == messages.cli_msgs[msgtype] and \
+               None == messages.srv_msgs[msgtype]:
                 raise PluginError('Unrecognized message type %x' % msgtype)
         self.msgtypes = msgtypes
         self.method = method
