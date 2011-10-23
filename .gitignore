@@ -2,3 +2,7 @@
 *.swp
 server
 client
+jar
+build
+dist
+*.egg-info
