@@ -185,6 +185,7 @@ def parse_packet(stream, msg_spec, side):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     (host, port, opts, pcfg) = parse_args()
 
     util.config_logging()

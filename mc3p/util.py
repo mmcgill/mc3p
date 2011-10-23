@@ -99,6 +99,5 @@ def config_logging():
         if not os.path.exists(lpath):
             write_default_logging_file(lpath)
         logging.config.fileConfig(lpath)
-        #logging.basicConfig(level=logging.INFO)
         logging_configured = True
 
