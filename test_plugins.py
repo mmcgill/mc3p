@@ -1,9 +1,9 @@
-import unittest, shutil, tempfile, os, os.path, logging
+import sys, unittest, shutil, tempfile, os, os.path, logging, imp
 
-from plugins import PluginConfig, PluginManager, load_source, MC3Plugin, msghdlr
+from mc3p.plugins import PluginConfig, PluginManager, MC3Plugin, msghdlr
 
 MOCK_PLUGIN_CODE = """
-from plugins import MC3Plugin, msghdlr
+from mc3p.plugins import MC3Plugin, msghdlr
 
 print 'Initializing mockplugin.py'
 instances = []
@@ -44,18 +44,50 @@ class MockPlugin(MC3Plugin):
 class MockMinecraftProxy(object):
     pass
 
+def load_source(name, path):
+    """Replacement for __import__/imp.load_source().
+
+    When loading 'foo.py', imp.load_source() uses a pre-compiled
+    file ('foo.pyc' or 'foo.pyo') if its timestamp is not older than
+    that of 'foo.py'. Unfortunately, the timestamps have a resolution
+    of seconds on most platforms, so updates made to 'foo.py' within
+    a second of the imp.load_source() call may or may not be reflected
+    in the loaded module -- the behavior is non-deterministic.
+
+    This load_source() replacement deletes a pre-compiled
+    file before calling imp.load_source() if the pre-compiled file's
+    timestamp is less than or equal to the timestamp of path.
+    """
+    if os.path.exists(path):
+        for ending in ('c', 'o'):
+            compiled_path = path+ending
+            if os.path.exists(compiled_path) and \
+               os.path.getmtime(compiled_path) <= os.path.getmtime(path):
+                os.unlink(compiled_path)
+    mod = __import__(name)
+    for p in name.split('.')[1:]:
+        mod = getattr(mod, p)
+    return reload(mod)
+
 class TestPluginManager(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
         cls.pdir = tempfile.mkdtemp()
+        cls.pkgdir = tempfile.mkdtemp(dir=cls.pdir)
+        with open(os.path.join(cls.pkgdir, '__init__.py'), 'w') as f:
+            f.write('')
+        sys.path.append(cls.pdir)
 
     @classmethod
     def tearDownClass(cls):
+        sys.path.pop()
         shutil.rmtree(cls.pdir)
 
     def _write_and_load(self, name, content):
-        pfile = os.path.join(self.pdir, name+'.py')
+        pfile = os.path.join(*name.split('.'))
+        pfile = os.path.join(self.pdir, pfile+'.py')
+        print 'loading %s as %s' % (pfile, name)
         with open(pfile, 'w') as f:
             f.write(content)
         mod = load_source(name, pfile)
@@ -74,7 +106,7 @@ class TestPluginManager(unittest.TestCase):
 
     def testInstantiation(self):
         mockplugin = self._write_and_load('mockplugin', MOCK_PLUGIN_CODE)
-        pcfg = PluginConfig(self.pdir).add('mockplugin', 'p1').add('mockplugin', 'p2')
+        pcfg = PluginConfig().add('mockplugin', 'p1').add('mockplugin', 'p2')
         self.pmgr = PluginManager(pcfg, self.cli_proxy, self.srv_proxy)
         self.pmgr._load_plugins()
         self.pmgr._instantiate_all()
@@ -83,7 +115,7 @@ class TestPluginManager(unittest.TestCase):
         self.assertTrue(mockplugin.instances[1].initialized)
 
     def testDefaultPluginIds(self):
-        pcfg = PluginConfig(self.pdir).add('mockplugin')
+        pcfg = PluginConfig().add('mockplugin')
         self.assertEqual('mockplugin', pcfg.ids[0])
 
         pcfg.add('mockplugin')
@@ -93,15 +125,15 @@ class TestPluginManager(unittest.TestCase):
 
     def testEmptyPluginConfig(self):
         mockplugin = self._write_and_load('mockplugin', MOCK_PLUGIN_CODE)
-        pcfg = PluginConfig(self.pdir)
+        pcfg = PluginConfig()
         self.pmgr = PluginManager(pcfg, self.cli_proxy, self.srv_proxy)
         self.pmgr._load_plugins()
         self.pmgr._instantiate_all()
         self.assertEqual(0, len(mockplugin.instances))
         
     def testMissingPluginClass(self):
-        self._write_and_load('empty', 'from plugins import MC3Plugin\n')
-        pcfg = PluginConfig(self.pdir).add('empty', 'p')
+        self._write_and_load('empty', 'from mc3p.plugins import MC3Plugin\n')
+        pcfg = PluginConfig().add('empty', 'p')
         self.pmgr = PluginManager(pcfg, self.cli_proxy, self.srv_proxy)
         self.pmgr._load_plugins()
         # Should log an error, but not raise an exception.
@@ -110,7 +142,7 @@ class TestPluginManager(unittest.TestCase):
     def testMultiplePluginClasses(self):
         code = MOCK_PLUGIN_CODE + "class AnotherPlugin(MC3Plugin): pass"
         mockplugin = self._write_and_load('mockplugin', code)
-        pcfg = PluginConfig(self.pdir).add('mockplugin', 'p')
+        pcfg = PluginConfig().add('mockplugin', 'p')
         self.pmgr = PluginManager(pcfg, self.cli_proxy, self.srv_proxy)
         self.pmgr._load_plugins()
         self.pmgr._instantiate_all()
@@ -120,9 +152,19 @@ class TestPluginManager(unittest.TestCase):
                      'map_seed': 42, 'server_mode': 0, 'dimension': 0,
                      'difficulty': 2, 'world_height': 128, 'max_players': 16}
 
+    def testLoadingPluginInPackage(self):
+        pkgname = os.path.basename(self.__class__.pkgdir)
+        mockplugin = self._write_and_load(pkgname+'.mockplugin', MOCK_PLUGIN_CODE)
+        pcfg = PluginConfig().add('%s.mockplugin' % pkgname, 'p1')
+        self.pmgr = PluginManager(pcfg, self.cli_proxy, self.srv_proxy)
+        self.pmgr._load_plugins()
+        self.pmgr._instantiate_all()
+        self.assertEqual(1, len(mockplugin.instances))
+        self.assertTrue(mockplugin.instances[0].initialized)
+
     def testInstantiationAfterSuccessfulHandshake(self):
         mockplugin = self._write_and_load('mockplugin', MOCK_PLUGIN_CODE)
-        pcfg = PluginConfig(self.pdir).add('mockplugin', 'p1').add('mockplugin', 'p2')
+        pcfg = PluginConfig().add('mockplugin', 'p1').add('mockplugin', 'p2')
         self.pmgr = PluginManager(pcfg, self.cli_proxy, self.srv_proxy)
         self.assertEqual(0, len(mockplugin.instances))
 
@@ -144,7 +186,7 @@ class TestPluginManager(unittest.TestCase):
 
     def testMessageHandlerFiltering(self):
         mockplugin = self._write_and_load('mockplugin', MOCK_PLUGIN_CODE)
-        pcfg = PluginConfig(self.pdir).add('mockplugin', 'p1').add('mockplugin', 'p2')
+        pcfg = PluginConfig().add('mockplugin', 'p1').add('mockplugin', 'p2')
         self.pmgr = PluginManager(pcfg, self.cli_proxy, self.srv_proxy)
         self.pmgr.filter(self.__class__.handshake_msg, 'client')
         p1 = mockplugin.instances[0]

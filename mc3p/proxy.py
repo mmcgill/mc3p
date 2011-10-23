@@ -17,10 +17,6 @@ def sigint_handler(signum, stack):
     sys.exit(0)
 
 
-def get_plugin_dir():
-    """Returns the plugin directory."""
-    return os.path.join(os.path.dirname(__file__), 'plugin')
-
 def parse_args():
     """Return host and port, or print usage and exit."""
     usage = "usage: %prog [options] host [port]"
@@ -43,8 +39,8 @@ and forward that connection to <host>:<port>."""
 
     host = args[0]
     port = 25565
-    pcfg = PluginConfig(get_plugin_dir())
-    pregex = re.compile('((?P<id>\\w+):)?(?P<plugin_name>\\w+)(\\((?P<argstr>.*)\\))?$')
+    pcfg = PluginConfig()
+    pregex = re.compile('((?P<id>\\w+):)?(?P<plugin_name>[\\w\\.\\d_]+)(\\((?P<argstr>.*)\\))?$')
     for pstr in opts.plugins:
         m = pregex.match(pstr)
         if not m:

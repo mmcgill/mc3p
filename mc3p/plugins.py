@@ -7,28 +7,6 @@ from parsing import *
 
 logger = logging.getLogger(__name__)
 
-def load_source(name, path):
-    """Replacement for imp.load_source().
-
-    When loading 'foo.py', imp.load_source() uses a pre-compiled
-    file ('foo.pyc' or 'foo.pyo') if its timestamp is not older than
-    that of 'foo.py'. Unfortunately, the timestamps have a resolution
-    of seconds on most platforms, so updates made to 'foo.py' within
-    a second of the imp.load_source() call may or may not be reflected
-    in the loaded module -- the behavior is non-deterministic.
-
-    This load_source() replacement deletes a pre-compiled
-    file before calling imp.load_source() if the pre-compiled file's
-    timestamp is less than or equal to the timestamp of path.
-    """
-    if os.path.exists(path):
-        for ending in ('c', 'o'):
-            compiled_path = path+ending
-            if os.path.exists(compiled_path) and \
-               os.path.getmtime(compiled_path) <= os.path.getmtime(path):
-                os.unlink(compiled_path)
-    return imp.load_source(name, path)
-
 ### Exceptions ###
 class ConfigError(Exception):
     def __init__(self,msg):
@@ -148,8 +126,7 @@ class PluginClient(asyncore.dispatcher):
 
 class PluginConfig(object):
     """Store plugin configuration"""
-    def __init__(self, dir):
-        self.__dir = dir
+    def __init__(self):
         self.__ids = []
         self.__plugin_names = {} # { id -> plugin_name }
         self.__argstrs = {} # { id -> argstr }
@@ -181,11 +158,6 @@ class PluginConfig(object):
             raise ConfigError("No such ids: %s" % repr(unknown_ids))
         self.__orderings[msgtype] = id_list
         return self
-
-    @property
-    def plugin_dir(self):
-        """Directory that contains plugin files."""
-        return self.__dir
 
     @property
     def ids(self):
@@ -249,10 +221,12 @@ class PluginManager(object):
 
     def _load_plugin(self, pname):
         """Load or reload plugin pname."""
-        ppath = os.path.join(self.__config.plugin_dir, pname+'.py')
         try:
-            logger.debug('  Loading %s at %s' % (pname, ppath))
-            self.__plugins[pname] = load_source(pname, ppath)
+            logger.debug('  Loading %s' % pname)
+            mod = __import__(pname)
+            for p in pname.split('.')[1:]:
+                mod = getattr(mod, p)
+            self.__plugins[pname] = reload(mod)
         except Exception as e:
             logger.error("Plugin %s failed to load: %s" % (pname, str(e)))
             return
