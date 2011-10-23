@@ -99,7 +99,7 @@ class UnsupportedPacketException(Exception):
     def __init__(self,pid):
         Exception.__init__(self,"Unsupported packet id 0x%x" % pid)
 
-class MinecraftProxy(asyncore.dispatcher):
+class MinecraftProxy(asyncore.dispatcher_with_send):
     """Proxies a packet stream from a Minecraft client or server.
     """
 
@@ -113,7 +113,7 @@ class MinecraftProxy(asyncore.dispatcher):
         and creating a server proxy with other_side=client. Finally, the
         proxy creator should do client_proxy.other_side = server_proxy.
         """
-        asyncore.dispatcher.__init__(self,src_sock)
+        asyncore.dispatcher_with_send.__init__(self, src_sock)
         self.plugin_mgr = None
         self.other_side = other_side
         if other_side == None:
@@ -175,11 +175,6 @@ class MinecraftProxy(asyncore.dispatcher):
 
     def inject_msg(self, bytes):
         self.msg_queue.append(bytes)
-
-    def writable(self):
-        # Tell asyncore that we're not interested in write events. Without this,
-        # asyncore.loop() will peg a CPU a 100%.
-        return False
 
 
 class Message(dict):
