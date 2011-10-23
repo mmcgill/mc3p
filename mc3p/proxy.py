@@ -143,7 +143,12 @@ class MinecraftProxy(asyncore.dispatcher):
         try:
             packet = parse_packet(self.stream, self.msg_spec, self.side)
             while packet != None:
-                if not self.plugin_mgr or self.plugin_mgr.filter(packet, self.side):
+                forward = True
+                if self.plugin_mgr:
+                    forwarding = self.plugin_mgr.filter(packet, self.side)
+                    if forwarding and packet.modified:
+                        packet['raw_bytes'] = self.msg_spec[packet['msgtype']](packet)
+                if forwarding:
                     self.dst_sock.sendall(packet['raw_bytes'])
                 # Since we know we're at a message boundary, we can inject
                 # any messages in the queue
@@ -173,6 +178,16 @@ class MinecraftProxy(asyncore.dispatcher):
         return False
 
 
+class Message(dict):
+    def __init__(self, d):
+        super(Message, self).__init__(d)
+        self.modified = False
+
+    def __setitem__(self, key, val):
+        if key in self and self[key] != val:
+            self.modified = True
+        return super(Message, self).__setitem__(key, val)
+
 def parse_packet(stream, msg_spec, side):
     """Parse a single packet out of stream, and return it."""
     # read Packet ID
@@ -183,7 +198,7 @@ def parse_packet(stream, msg_spec, side):
     msg_parser = msg_spec[msgtype]
     msg = msg_parser(stream)
     msg['raw_bytes'] = stream.packet_finished()
-    return msg
+    return Message(msg)
 
 
 if __name__ == "__main__":
