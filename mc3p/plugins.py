@@ -306,6 +306,8 @@ class PluginManager(object):
         """
         if self.__session_active:
             if self.__msgbuf:
+                # Re-play handshake messages to the plugins, ignoring return values
+                # since the messages have already been sent and so cannot be filtered.
                 for (_msg, _dst) in self.__msgbuf:
                     self._call_plugins(_msg, _dst)
                 self.__msgbuf = None
