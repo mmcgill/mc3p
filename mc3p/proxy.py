@@ -82,50 +82,47 @@ class MinecraftSession(object):
         """Open connection to dsthost:dstport, and return client and server proxies."""
         logger.info("creating proxy from client to %s:%d" % (dsthost,dstport))
         self.srv_proxy = None
-        self.cli_proxy = None
-        self.shutting_down = False
         try:
             serversock = socket.create_connection( (dsthost,dstport) )
+            self.cli_proxy = MinecraftProxy(clientsock)
         except Exception as e:
             clientsock.close()
             logger.error("Couldn't connect to %s:%d - %s", dsthost, dstport, str(e))
-            sys.exit(1)
-        self.cli_proxy = MinecraftProxy(clientsock, serversock,
-                                        messages.cli_msgs, self.shutdown, 'client')
-        self.srv_proxy = MinecraftProxy(serversock, clientsock,
-                                        messages.srv_msgs, self.shutdown, 'server')
+            logger.info(traceback.format_exc())
+            return
+        self.srv_proxy = MinecraftProxy(serversock, self.cli_proxy)
         self.plugin_mgr = PluginManager(pcfg, self.cli_proxy, self.srv_proxy)
         self.cli_proxy.plugin_mgr = self.plugin_mgr
         self.srv_proxy.plugin_mgr = self.plugin_mgr
-
-    def shutdown(self, side):
-        """Close proxies and exit."""
-        if self.shutting_down:
-            return
-        logger.warn("%s socket closed, shutting down.", side)
-        self.plugin_mgr.destroy()
-        self.shutting_down = True
-        if self.cli_proxy:
-            self.cli_proxy.close()
-        if self.srv_proxy:
-            self.srv_proxy.close()
 
 class UnsupportedPacketException(Exception):
     def __init__(self,pid):
         Exception.__init__(self,"Unsupported packet id 0x%x" % pid)
 
-
 class MinecraftProxy(asyncore.dispatcher):
     """Proxies a packet stream from a Minecraft client or server.
     """
 
-    def __init__(self, src_sock, dst_sock, msg_spec, on_shutdown, side):
+    def __init__(self, src_sock, other_side=None):
+        """Proxies one side of a client-server connection.
+
+        MinecraftProxy instances are created in pairs that have references to
+        one another. Since a client initiates a connection, the client side of
+        the pair is always created first, with other_side = None. The creator
+        of the client proxy is then responsible for connecting to the server
+        and creating a server proxy with other_side=client. Finally, the
+        proxy creator should do client_proxy.other_side = server_proxy.
+        """
         asyncore.dispatcher.__init__(self,src_sock)
         self.plugin_mgr = None
-        self.dst_sock = dst_sock
-        self.msg_spec = msg_spec
-        self.on_shutdown = on_shutdown
-        self.side = side
+        self.other_side = other_side
+        if other_side == None:
+            self.side = 'client'
+            self.msg_spec = messages.cli_msgs
+        else:
+            self.side = 'server'
+            self.msg_spec = messages.srv_msgs
+            self.other_side.other_side = self
         self.stream = Stream()
         self.last_report = 0
         self.msg_queue = []
@@ -149,12 +146,12 @@ class MinecraftProxy(asyncore.dispatcher):
                     if forwarding and packet.modified:
                         packet['raw_bytes'] = self.msg_spec[packet['msgtype']](packet)
                 if forwarding:
-                    self.dst_sock.sendall(packet['raw_bytes'])
+                    self.other_side.send(packet['raw_bytes'])
                 # Since we know we're at a message boundary, we can inject
                 # any messages in the queue
                 if len(self.msg_queue) > 0:
                     for msgbytes in self.msg_queue:
-                        self.dst_sock.sendall(msgbytes)
+                        self.other_side.send(msgbytes)
                     self.msg_queue = []
                 packet = parse_packet(self.stream,self.msg_spec, self.side)
         except PartialPacketException:
@@ -163,11 +160,18 @@ class MinecraftProxy(asyncore.dispatcher):
             logger.error("mitm_parser caught exception")
             logger.error(traceback.format_exc())
             logger.debug("Current stream buffer: %s" % repr(self.stream.buf))
-            self.on_shutdown(self.side)
 
     def handle_close(self):
         """Call shutdown handler."""
-        self.on_shutdown(self.side)
+        logger.info("%s socket closed.", self.side)
+        self.close()
+        if self.other_side is not None:
+            logger.info("shutting down other side")
+            self.other_side.other_side = None
+            self.other_side.close()
+            self.other_side = None
+            logger.info("shutting down plugin manager")
+            self.plugin_mgr.destroy()
 
     def inject_msg(self, bytes):
         self.msg_queue.append(bytes)
