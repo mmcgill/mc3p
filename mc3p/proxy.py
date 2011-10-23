@@ -32,6 +32,8 @@ and forward that connection to <host>:<port>."""
                       type="int", help="Listen on this port")
     parser.add_option("--plugin", dest="plugins", metavar="ID:PLUGIN(ARGS)", type="string",
                       action="append", help="Configure a plugin", default=[])
+    parser.add_option("--profile", dest="perf_data", metavar="FILE", default=None,
+                      help="Enable profiling, save profiling data to FILE")
     (opts,args) = parser.parse_args()
 
     if not 1 <= len(args) <= 2:
@@ -204,5 +206,10 @@ if __name__ == "__main__":
         MinecraftSession(pcfg, cli_sock, host, port)
 
         # I/O event loop.
-        asyncore.loop()
+        if opts.perf_data:
+            logger.warn("Profiling enabled, saving data to %s" % opts.perf_data)
+            import cProfile
+            cProfile.run('asyncore.loop()', opts.perf_data)
+        else:
+            asyncore.loop()
 
