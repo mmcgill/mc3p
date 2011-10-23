@@ -40,9 +40,9 @@ code.
 
 To run a plugin, you must enable it with the --plugin <name> option when you start mc3p.
 All enabled plugins are initialized after a client successfully connects to a server.
-For example, to run the plugin named 'mute':
+For example, to run the mute example plugin that comes with mc3p:
 
-    $ python -m mc3p.proxy --plugin 'mute' <server>
+    $ python -m mc3p.proxy --plugin 'mc3p.plugin.mute' <server>
 
 Some plugins accept arguments that modify their behavior. To pass arguments
 to a plugin, enclose them in parentheses following the plugin's name, like so:
@@ -59,15 +59,15 @@ server. It requires no modification to either the Minecraft client or server.
 
 Give it a try: start mc3p with the 'mute' plugin enabled:
 
-    $ python -m mc3p.proxy --plugin 'mute' your.favorite.server.com
+    $ python -m mc3p.proxy --plugin 'mc3p.plugin.mute' your.favorite.server.com
 
 You can now mute a player by typing '/mute NAME' in chat,
 and unmute them with '/unmute NAME'. You can display muted players with '/muted'.
 
-The plugin works by intercepting Minecraft all chat messages, and silently
+The plugin works by intercepting all Minecraft chat messages, and silently
 discarding those sent by muted players.
 
-Now take a look at the source code for the 'mute' plugin, found in plugin/mute.py:
+Now take a look at the source code for the 'mute' plugin:
 
     from mc3p.plugins import MC3Plugin, msghdlr
 
@@ -115,7 +115,7 @@ Now take a look at the source code for the 'mute' plugin, found in plugin/mute.p
                 # Drop messages containing the string <NAME>, where NAME is a muted player name.
                 return not any(txt.startswith('<%s>' % name) for name in self.muted_set)
 
-Every mc3p plugin (e.g. mute.py) contains a single *plugin class*, a
+Every mc3p plugin is a Python module that contains a single *plugin class*, a
 subclass of MC3Plugin. A plugin must contain *exactly* one plugin class;
 mc3p will print an error if multiple sub-classes of MC3Plugin are found.
 
@@ -127,18 +127,20 @@ the 'args' parameter; otherwise, 'args' is None.
 
 A plugin class registers a *message handler* for every message type it wishes
 to receive. To register a method of a plugin class as a message handler, decorate
-it with '@msghdlr'. the '@msghdlr' decorator takes one or more message types
+it with '@msghdlr'. The '@msghdlr' decorator takes one or more message types
 as arguments. Each message handler should take two arguments (in addition to 'self'):
 
 * 'msg', a dictionary representing the message, and
 * 'source', which indicates the sender of the message; source is either
   'client' or 'server'.
 
-The 'msg' dictionary always maps the key 'msgtype' to the message's type. If
+The 'msg' dictionary always maps the key 'msgtype' to the message's type, a
+number between 0 and 0xFF. If
 your message handler is registered for multiple types, you can determine the type
 of a given message by checking `msg['msgtype']`. The other key-value pairs
-in the 'msg' dictionary depend on the specific message type. See messages.py
-for a definition of the keys associated with each message type.
+in the 'msg' dictionary depend on the specific message type. See
+[messages.py](mc3p/messages.py) for a definition of the keys associated with
+each message type.
 
 A message handler returns a boolean value indicating whether the message should
 be forwarded to its destination. A return value of True forwards the message,
