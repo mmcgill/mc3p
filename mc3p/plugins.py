@@ -87,6 +87,9 @@ class PluginHandler(asyncore.dispatcher):
         except PartialPacketException:
             pass # Not enough data in the buffer
 
+    def writable(self):
+        return False
+
 class PluginClient(asyncore.dispatcher):
     """Send plugin messages to MC3P."""
 
@@ -123,6 +126,9 @@ class PluginClient(asyncore.dispatcher):
         #TODO: make use of asyncore interface to send this in non-blocking fashion.
         self.sendall(MC_short(len(msgbytes)))
         self.sendall(msgbytes)
+
+    def writable(self):
+        return False
 
 class PluginConfig(object):
     """Store plugin configuration"""
