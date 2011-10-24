@@ -139,8 +139,8 @@ number between 0 and 0xFF. If
 your message handler is registered for multiple types, you can determine the type
 of a given message by checking `msg['msgtype']`. The other key-value pairs
 in the 'msg' dictionary depend on the specific message type. See
-[messages.py](mc3p/messages.py) for a definition of the keys associated with
-each message type.
+[messages.py](https://github.com/mmcgill/mc3p/blob/master/mc3p/messages.py)
+for a definition of the keys associated with each message type.
 
 A message handler returns a boolean value indicating whether the message should
 be forwarded to its destination. A return value of True forwards the message,
