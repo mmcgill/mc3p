@@ -126,6 +126,7 @@ class MinecraftProxy(asyncore.dispatcher_with_send):
         self.stream = Stream()
         self.last_report = 0
         self.msg_queue = []
+        self.out_of_sync = False
 
     def handle_read(self):
         """Read all available bytes, and process as many packets as possible.
@@ -137,6 +138,14 @@ class MinecraftProxy(asyncore.dispatcher_with_send):
                  self.side, self.stream.tot_bytes, self.stream.wasted_bytes,
                  100 * float(self.stream.wasted_bytes) / self.stream.tot_bytes))
         self.stream.append(self.recv(4092))
+
+        if self.out_of_sync:
+            data = self.stream.read(len(self.stream))
+            self.stream.packet_finished()
+            if self.other_side:
+                self.other_side.send(data)
+            return
+
         try:
             packet = parse_packet(self.stream, self.msg_spec, self.side)
             while packet != None:
@@ -154,11 +163,11 @@ class MinecraftProxy(asyncore.dispatcher_with_send):
                     forwarding = self.plugin_mgr.filter(packet, self.side)
                     if forwarding and packet.modified:
                         packet['raw_bytes'] = self.msg_spec[packet['msgtype']](packet)
-                if forwarding:
+                if forwarding and self.other_side:
                     self.other_side.send(packet['raw_bytes'])
                 # Since we know we're at a message boundary, we can inject
                 # any messages in the queue
-                if len(self.msg_queue) > 0:
+                if len(self.msg_queue) > 0 and self.other_side:
                     for msgbytes in self.msg_queue:
                         self.other_side.send(msgbytes)
                     self.msg_queue = []
@@ -166,9 +175,11 @@ class MinecraftProxy(asyncore.dispatcher_with_send):
         except PartialPacketException:
             pass # Not all data for the current packet is available.
         except Exception:
-            logger.error("mitm_parser caught exception")
+            logger.error("MinecraftProxy for %s caught exception, out of sync" % self.side)
             logger.error(traceback.format_exc())
             logger.debug("Current stream buffer: %s" % repr(self.stream.buf))
+            self.out_of_sync = True
+            self.stream.reset()
 
     def handle_close(self):
         """Call shutdown handler."""
@@ -202,7 +213,7 @@ def parse_packet(stream, msg_spec, side):
     msgtype = parse_unsigned_byte(stream)
     if not msg_spec[msgtype]:
         raise UnsupportedPacketException(msgtype)
-    logger.debug("Trying to parse message type %x" % msgtype)
+    logger.debug("%s trying to parse message type %x" % (side, msgtype))
     msg_parser = msg_spec[msgtype]
     msg = msg_parser(stream)
     msg['raw_bytes'] = stream.packet_finished()

@@ -29,6 +29,9 @@ class Stream(object):
         self.i += n
         return str
 
+    def reset(self):
+        self.i = 0
+
     def packet_finished(self):
         """Mark the completion of a packet, and return its bytes as a string."""
         # Discard all data that was read for the previous packet,
