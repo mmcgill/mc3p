@@ -45,6 +45,8 @@ and forward that connection to <host>:<port>."""
     parser.add_option("-l", "--log-level", dest="loglvl", metavar="LEVEL",
                       choices=["debug","info","warn","error"],
                       help="Override logging.conf root log level")
+    parser.add_option("--log-file", dest='logfile', metavar="FILE", default=None,
+                      help="logging configuration file (optional)")
     parser.add_option("-p", "--local-port", dest="locport", metavar="PORT", default="34343",
                       type="int", help="Listen on this port")
     parser.add_option("--plugin", dest="plugins", metavar="ID:PLUGIN(ARGS)", type="string",
@@ -238,10 +240,11 @@ def parse_packet(stream, msg_spec, side):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.ERROR)
     (host, port, opts, pcfg) = parse_args()
 
-    util.config_logging()
+    if opts.logfile:
+        util.config_logging(opts.logfile)
 
     if opts.loglvl:
         logging.root.setLevel(getattr(logging, opts.loglvl.upper()))

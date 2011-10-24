@@ -110,14 +110,15 @@ datefmt=%H:%M:%S
 
 logging_configured = False
 
-def config_logging():
+def config_logging(logfile=None):
     """Configure logging. Can safely be called multiple times."""
     global logging_configured
     if not logging_configured:
         dir = os.path.dirname(os.path.abspath(__file__))
-        lpath = os.path.join(dir, 'logging.conf')
-        if not os.path.exists(lpath):
-            write_default_logging_file(lpath)
-        logging.config.fileConfig(lpath)
+        if not logfile:
+            logfile = os.path.join(dir, 'logging.conf')
+        if not os.path.exists(logfile):
+            write_default_logging_file(logfile)
+        logging.config.fileConfig(logfile)
         logging_configured = True
 
