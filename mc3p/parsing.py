@@ -165,26 +165,14 @@ def parse_metadata(stream):
         type = parse_byte(stream)
     return data
 
-def _parse_slot(stream):
-    item_id = parse_short(stream)
-    if item_id == -1:
-        return None
-    return (item_id,parse_byte(stream),parse_short(stream))
-
-def _emit_slot(slot):
-    if not slot:
-        return emit_short(-1)
-    item_id, c, u = slot
-    return ''.join([emit_short(item_id),emit_byte(c),emit_short(u)])
-
 def parse_inventory(stream):
     n = parse_short(stream)
     inv = { "count": n }
-    inv["slots"] = [_parse_slot(stream) for i in xrange(0,n)]
+    inv["slots"] = [parse_slot_update(stream) for i in xrange(0,n)]
     return inv
 
 def emit_inventory(inv):
-    slotstr = ''.join([_emit_slot(slot) for slot in inv['slots']])
+    slotstr = ''.join([emit_slot_update(slot) for slot in inv['slots']])
     return ''.join([emit_short(inv['count']),slotstr])
 
 MC_inventory = Parsem(parse_inventory,emit_inventory)
@@ -202,12 +190,70 @@ def emit_slot_update(update):
 
 MC_slot_update = Parsem(parse_slot_update, emit_slot_update)
 
+SLOT_UPDATE_2_ITEM_IDS = set([
+    0x15A, #Fishing rod
+    0x167, #Shears
+
+    #TOOLS
+    #sword, shovel, pickaxe, axe, hoe
+    0x10C, 0x10D, 0x10E, 0x10F, 0x122, #WOOD
+    0x110, 0x111, 0x112, 0x113, 0x123, #STONE
+    0x10B, 0x100, 0x101, 0x102, 0x124, #IRON
+    0x114, 0x115, 0x116, 0x117, 0x125, #DIAMOND
+    0x11B, 0x11C, 0x11D, 0x11E, 0x126, #GOLD
+
+    #ARMOUR
+    #helmet, chestplate, leggings, boots
+    0x12A, 0x12B, 0x12C, 0x12D, #LEATHER
+    0x12E, 0x12F, 0x130, 0x131, #CHAIN
+    0x132, 0x133, 0x134, 0x135, #IRON
+    0x136, 0x137, 0x138, 0x139, #DIAMOND
+    0x13A, 0x13B, 0x13C, 0x14D  #GOLD
+])
+
+def parse_slot_update2(stream):
+    r = parse_slot_update(stream)
+    if r is not None and r['item_id'] in SLOT_UPDATE_2_ITEM_IDS:
+        n = parse_short(stream)
+        r['nbt_size'] = n
+        if n > 0:
+            r['nbt_data'] = stream.read(n)
+        else:
+            r['nbt_data'] = None
+    return r
+
+def emit_slot_update2(update):
+    if not update:
+        return emit_short(-1)
+    s = emit_slot_update(update)
+    if update['item_id'] in SLOT_UPDATE_2_ITEM_IDS:
+        size = update['nbt_size']
+        s = ''.join(s, emit_short(size))
+        if size >= 0:
+            data = update['nbt_data']
+        s = ''.join([s, nbtdata])
+    return s
+
+MC_slot_update2 = Parsem(parse_slot_update2, emit_slot_update2)
+
+def parse_inventory2(stream):
+    n = parse_short(stream)
+    inv = { "count": n }
+    inv["slots"] = [parse_slot_update2(stream) for i in xrange(0,n)]
+    return inv
+
+def emit_inventory2(inv):
+    slotstr = ''.join([emit_slot_update2(slot) for slot in inv['slots']])
+    return ''.join([emit_short(inv['count']),slotstr])
+
+MC_inventory2 = Parsem(parse_inventory2,emit_inventory2)
+
 def parse_chunk(stream):
     n = parse_int(stream)
     return { 'size': n, 'data': stream.read(n) }
 
 def emit_chunk(ch):
-    return ''.join([emit_int(ch['size']),emit_string(ch['data'])])
+    return ''.join([emit_int(ch['size']), emit_string(ch['data'])])
 
 MC_chunk = Parsem(parse_chunk, emit_chunk)
 
@@ -224,19 +270,6 @@ def emit_multi_block_change(changes):
                     ''.join([emit_byte(x)  for x in changes['metadata_array']])])
 
 MC_multi_block_change = Parsem(parse_multi_block_change, emit_multi_block_change)
-
-def parse_item_details(stream):
-    id = parse_short(stream)
-    if id == -1:
-        return None
-    return {'count':parse_byte(stream),'uses':parse_short(stream)}
-
-def emit_item_details(details):
-    if details == None:
-        return emit_short(-1)
-    return ''.join([emit_byte(details['count']), emit_short(details['uses'])])
-
-MC_item_details = Parsem(parse_item_details, emit_item_details)
 
 def parse_explosion_records(stream):
     n = parse_int(stream)

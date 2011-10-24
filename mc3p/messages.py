@@ -56,7 +56,7 @@ srv_msgs[0xff] = defmsg(0xff, "Disconnect/Kick", [
 
 ### VERSION 17 - Corresponds to Beta 1.8
 
-protocol[17] = list(protocol[0][0]), list(protocol[0][1])
+protocol[17] = tuple(map(list, protocol[0]))
 cli_msgs, srv_msgs = protocol[17]
 
 cli_msgs[0x00] = \
@@ -148,7 +148,7 @@ srv_msgs[0x0f] = defmsg(0x0f, "Block placement", [
     ('y',MC_byte),
     ('z',MC_int),
     ('dir',MC_byte),
-    ('details',MC_item_details)])
+    ('details',MC_slot_update)])
 
 cli_msgs[0x10] = \
 srv_msgs[0x10] = defmsg(0x10, "Held item selection",[
@@ -388,7 +388,7 @@ cli_msgs[0x66] = defmsg(0x66, "Window click", [
     ('is_right_click', MC_bool),
     ('action_num', MC_short),
     ('shift', MC_bool),
-    ('details', MC_item_details)])
+    ('details', MC_slot_update)])
 
 srv_msgs[0x67] = defmsg(0x67, "Set slot", [
     ('window_id',MC_byte),
@@ -441,4 +441,52 @@ srv_msgs[0xc9] = defmsg(0xc9, "Player list item", [
     ('online', MC_bool),
     ('ping', MC_short)])
 
+### Version 18 - Beta 1.9pre1 (UNTESTED)
+protocol[18] = tuple(map(list, protocol[17]))
+cli_msgs, srv_msgs = protocol[18]
+
+# According to http://mc.kev009.com/Pre-release_protocol, there were no
+# message format changes in this release.
+
+### Version 19 - Beta 1.9pre2 (UNTESTED)
+protocol[19] = tuple(map(list, protocol[18]))
+cli_msgs, srv_msgs = protocol[19]
+
+cli_msgs[0x0f] = \
+srv_msgs[0x0f] = defmsg(0x0f, "Block placement", [
+    ('x',MC_int),
+    ('y',MC_byte),
+    ('z',MC_int),
+    ('dir',MC_byte),
+    ('details',MC_slot_update2)])
+
+cli_msgs[0x66] = defmsg(0x66, "Window click", [
+    ('window_id', MC_byte),
+    ('slot', MC_short),
+    ('is_right_click', MC_bool),
+    ('action_num', MC_short),
+    ('shift', MC_bool),
+    ('details', MC_slot_update2)])
+
+srv_msgs[0x67] = defmsg(0x67, "Set slot", [
+    ('window_id',MC_byte),
+    ('slot',MC_short),
+    ('slot_update',MC_slot_update2)])
+
+srv_msgs[0x68] = defmsg(0x68, "Window items", [
+    ('window_id',MC_byte),
+    ('inventory',MC_inventory2)])
+
+### Version 20 - Beta 1.9pre4
+protocol[20] = tuple(map(list, protocol[19]))
+cli_msgs, srv_msgs = protocol[20]
+
+srv_msgs[0x2b] = defmsg(0x2b, "Experience", [
+    ('curr_exp', MC_float),
+    ('level', MC_short),
+    ('tot_exp', MC_short)])
+
+cli_msgs[0x6c] = defmsg(0x6c, "Enchant Item", [
+    ('window_id', MC_byte),
+    ('enchantment', MC_byte)])
 
