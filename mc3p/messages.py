@@ -1,11 +1,11 @@
 from parsing import *
 
-cli_msgs = [None] * 256
-srv_msgs = [None] * 256
+protocol = {}
 
-cli_msgs[0x00] = \
-srv_msgs[0x00] = defmsg(0x00,"Keep Alive",[
-    ('id', MC_int)])
+### GENERIC MESSAGES - Independent of protocol version ###
+
+protocol[0] = [None] * 256, [None] * 256
+cli_msgs, srv_msgs = protocol[0]
 
 cli_msgs[0x01] = defmsg(0x01,"Login Request",[
     ('proto_version',MC_int),
@@ -30,6 +30,21 @@ cli_msgs[0x02] = defmsg(0x02,"Handshake",[
     ('username',MC_string)])
 srv_msgs[0x02] = defmsg(0x02, "Handshake", [
     ('hash',MC_string)])
+
+cli_msgs[0xfe] = defmsg(0xfe, "Server List Ping", [])
+
+cli_msgs[0xff] = \
+srv_msgs[0xff] = defmsg(0xff, "Disconnect/Kick", [
+    ('reason', MC_string)])
+
+### VERSION 17 - Corresponds to Beta 1.8
+
+protocol[17] = list(protocol[0][0]), list(protocol[0][1])
+cli_msgs, srv_msgs = protocol[17]
+
+cli_msgs[0x00] = \
+srv_msgs[0x00] = defmsg(0x00,"Keep Alive",[
+    ('id', MC_int)])
 
 cli_msgs[0x03] = \
 srv_msgs[0x03] = defmsg(0x03, "Chat",[
@@ -408,11 +423,5 @@ srv_msgs[0xc9] = defmsg(0xc9, "Player list item", [
     ('name', MC_string),
     ('online', MC_bool),
     ('ping', MC_short)])
-
-cli_msgs[0xfe] = defmsg(0xfe, "Server List Ping", [])
-
-cli_msgs[0xff] = \
-srv_msgs[0xff] = defmsg(0xff, "Disconnect/Kick", [
-    ('reason', MC_string)])
 
 

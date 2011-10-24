@@ -6,7 +6,7 @@ from optparse import OptionParser
 
 import messages
 from plugins import PluginConfig, PluginManager
-from parsing import parse_unsigned_byte
+from parsing import parse_unsigned_byte, parse_int
 from util import Stream, PartialPacketException
 import util
 
@@ -118,10 +118,10 @@ class MinecraftProxy(asyncore.dispatcher_with_send):
         self.other_side = other_side
         if other_side == None:
             self.side = 'client'
-            self.msg_spec = messages.cli_msgs
+            self.msg_spec = messages.protocol[0][0]
         else:
             self.side = 'server'
-            self.msg_spec = messages.srv_msgs
+            self.msg_spec = messages.protocol[0][1]
             self.other_side.other_side = self
         self.stream = Stream()
         self.last_report = 0
@@ -140,6 +140,15 @@ class MinecraftProxy(asyncore.dispatcher_with_send):
         try:
             packet = parse_packet(self.stream, self.msg_spec, self.side)
             while packet != None:
+                if packet['msgtype'] == 0x01 and self.side == 'client':
+                    # Determine which protocol message definitions to use.
+                    proto_version = packet['proto_version']
+                    logger.info('Client requests protocol version %d' % proto_version)
+                    if not proto_version in messages.protocol:
+                        logger.error("Unsupported protocol version %d" % proto_version)
+                        self.handle_close()
+                        return
+                    self.msg_spec, self.other_side.msg_spec = messages.protocol[proto_version]
                 forward = True
                 if self.plugin_mgr:
                     forwarding = self.plugin_mgr.filter(packet, self.side)
