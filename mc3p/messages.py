@@ -410,6 +410,7 @@ srv_msgs[0x6a] = defmsg(0x6a, "Transaction", [
     ('action_num', MC_short),
     ('accepted', MC_bool)])
 
+cli_msgs[0x6b] = \
 srv_msgs[0x6b] = defmsg(0x6b, "Creative inventory action", [
     ('slot', MC_short),
     ('item_id', MC_short),
