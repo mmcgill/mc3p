@@ -490,3 +490,8 @@ cli_msgs[0x6c] = defmsg(0x6c, "Enchant Item", [
     ('window_id', MC_byte),
     ('enchantment', MC_byte)])
 
+### Version 21 - Beta 1.9pre5. No changes, so far as we know.
+
+protocol[21] = tuple(map(list, protocol[20]))
+cli_msgs, srv_msgs = protocol[21]
+
