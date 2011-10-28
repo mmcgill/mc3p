@@ -216,7 +216,7 @@ class PluginManager(object):
                     logger.error(traceback.format_exc())
             self.__instances = {}
 
-    def filter(self, msg, dst):
+    def filter(self, msg, source):
         """Filter msg through the configured plugins.
 
         Returns True if msg should be forwarded, False otherwise.
@@ -225,24 +225,24 @@ class PluginManager(object):
             if self.__msgbuf:
                 # Re-play handshake messages to the plugins, ignoring return values
                 # since the messages have already been sent and so cannot be filtered.
-                for (_msg, _dst) in self.__msgbuf:
-                    self._call_plugins(_msg, _dst)
+                for (_msg, _source) in self.__msgbuf:
+                    self._call_plugins(_msg, _source)
                 self.__msgbuf = None
-            return self._call_plugins(msg, dst)
+            return self._call_plugins(msg, source)
         else:
-            if 'client' == dst and 0x01 == msg['msgtype']:
+            if 'server' == source and 0x01 == msg['msgtype']:
                 logger.info('Handshake completed, loading plugins')
                 self.__session_active = True
                 self._load_plugins()
                 self._instantiate_all()
-            self.__msgbuf.append( (msg, dst) )
+            self.__msgbuf.append( (msg, source) )
             return True
 
-    def _call_plugins(self, msg, dst):
+    def _call_plugins(self, msg, source):
         msgtype = msg['msgtype']
         for id in self.__config.ordering(msgtype):
             inst = self.__instances.get(id, None)
-            if inst and not inst.filter(msg, dst):
+            if inst and not inst.filter(msg, source):
                 return False
         return True
 
@@ -346,13 +346,13 @@ class MC3Plugin(object):
         if msgbytes:
             self.__to_client.put(msgbytes)
 
-    def default_handler(self, msg, dir):
+    def default_handler(self, msg, source):
         """Default message handler for all message types.
 
         Override in subclass to filter all message types."""
         return True
 
-    def filter(self, msg, dir):
+    def filter(self, msg, source):
         """Filter msg via the appropriate message handler(s).
 
         Returns True to forward msg on, False to drop it.
@@ -360,7 +360,7 @@ class MC3Plugin(object):
         """
         msgtype = msg['msgtype']
         try:
-            if not self.default_handler(msg, dir):
+            if not self.default_handler(msg, source):
                 return False
         except:
             logger.error('Error in default handler of plugin %s:\n%s' % \
@@ -369,7 +369,7 @@ class MC3Plugin(object):
 
         try:
             if msgtype in self.__hdlrs:
-                return self.__hdlrs[msgtype](self, msg, dir)
+                return self.__hdlrs[msgtype](self, msg, source)
             else:
                 return True
         except:

@@ -185,7 +185,7 @@ class TestPluginManager(unittest.TestCase):
         self.pmgr = PluginManager(pcfg, self.cli_proxy, self.srv_proxy)
         self.assertEqual(0, len(mockplugin.instances))
 
-        self.pmgr.filter(self.__class__.handshake_msg, 'client')
+        self.pmgr.filter(self.__class__.handshake_msg, 'server')
         self.assertEqual(2, len(mockplugin.instances))
 
     def testMessageHandlerRegistration(self):
@@ -205,7 +205,7 @@ class TestPluginManager(unittest.TestCase):
         mockplugin = self._write_and_load('mockplugin', MOCK_PLUGIN_CODE)
         pcfg = PluginConfig().add('mockplugin', 'p1').add('mockplugin', 'p2')
         self.pmgr = PluginManager(pcfg, self.cli_proxy, self.srv_proxy)
-        self.pmgr.filter(self.__class__.handshake_msg, 'client')
+        self.pmgr.filter(self.__class__.handshake_msg, 'server')
         p1 = mockplugin.instances[0]
         p2 = mockplugin.instances[1]
         msg = {'msgtype': 0x03, 'chat_msg': 'foo!'}
