@@ -27,12 +27,12 @@ cli_msgs, srv_msgs = protocol[0]
 cli_msgs[0x01] = defmsg(0x01,"Login Request",[
     ('proto_version',MC_int),
     ('username',MC_string),
-    ('map_seed',MC_long),
-    ('nu1', MC_int),
-    ('nu2', MC_byte),
+    ('nu1',MC_long),
+    ('nu2', MC_int),
     ('nu3', MC_byte),
-    ('nu4', MC_unsigned_byte),
-    ('nu5', MC_unsigned_byte)])
+    ('nu4', MC_byte),
+    ('nu5', MC_unsigned_byte),
+    ('nu6', MC_unsigned_byte)])
 srv_msgs[0x01] = defmsg(0x01,"Login Response",[
     ('eid',MC_int),
     ('reserved',MC_string),
