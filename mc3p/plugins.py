@@ -16,6 +16,7 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
 import re, asyncore, os, socket, logging, traceback, imp, inspect
+import multiprocessing, Queue
 import messages
 from util import Stream, PartialPacketException
 from parsing import *
@@ -38,114 +39,6 @@ class PluginError(Exception):
 
     def __str__(self):
         return self.msg
-
-PLUGIN_SOCKET_PATH = "/tmp/mc3psock"
-
-class PluginListener(asyncore.dispatcher):
-    """Listen for UNIX socket connections from plugins."""
-
-    def __init__(self, stream, suffix):
-        self.stream = stream
-        asyncore.dispatcher.__init__(self)
-        sockname = PLUGIN_SOCKET_PATH+"-"+suffix
-        # Clean up the old socket, if it was there.
-        if os.path.exists(sockname):
-            os.unlink(sockname)
-        self.create_socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self.set_reuse_addr()
-        self.bind(sockname)
-        self.listen(5)
-
-    def handle_accept(self):
-        pair = self.accept()
-        if not pair:
-            return
-        sock, _ = pair
-        # See if the socket is valid.
-        try:
-            sock.getpeername()
-            PluginHandler(sock, self.stream)
-        except socket.error:
-            logger.info("In PluginListener.handle_accept(), sock.getpeername() failed. Did a plugin fail to initialize?")
-
-class PluginHandler(asyncore.dispatcher):
-    """Feed messages from plugins into a connection stream.
-
-    Since writes through the UNIX socket aren't guaranteed to be atomic,
-    we need a simple protocol to ensure we don't send a partial message
-    to a Minecraft client or server. Here's the protocol:
-
-        plugin_name: MC_string8, (len: MC_short, data: MC_byte * len)+
-
-    A plugin starts by sending an MC_string8 to identify itself.
-    It then sends a sequence of messages, each prefixed by its length."""
-
-    def __init__(self, sock, proxy):
-        self.proxy = proxy
-        self.plugin = None
-        self.buf = Stream()
-        asyncore.dispatcher.__init__(self,sock)
-
-    def handle_read(self):
-        data = self.recv(4096)
-        self.buf.append(data)
-        try:
-            if not self.plugin:
-                self.plugin = MC_string8(self.buf)
-                self.buf.packet_finished()
-                logger.debug("Got client connection from plugin '%s'" % self.plugin)
-            size = MC_short(self.buf)
-            while size <= len(self.buf):
-                msgbytes = self.buf.read(size)
-                self.buf.packet_finished()
-                logger.debug("Sending %d bytes from plugin %s: %s" % (size, self.plugin, repr(msgbytes)))
-                self.proxy.inject_msg(msgbytes)
-                size = MC_short(self.buf)
-        except PartialPacketException:
-            pass # Not enough data in the buffer
-
-    def writable(self):
-        return False
-
-class PluginClient(asyncore.dispatcher):
-    """Send plugin messages to MC3P."""
-
-    def __init__(self, suffix, plugin):
-        """Connect to PluginListener.
-
-        suffix is 'client' or 'server', and plugin is the plugin's name."""
-        if 'client' == suffix:
-            self.msg_spec = messages.cli_msgs
-        else:
-            self.msg_spec = messages.srv_msgs
-        asyncore.dispatcher.__init__(self)
-        self.create_socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self.connect(PLUGIN_SOCKET_PATH+"-"+suffix)
-        self.sendall(MC_string8(plugin))
-
-    def inject_msg(self, msg):
-        """Inject a message into the stream."""
-        if not msg.has_key('msgtype'):
-            logger.error("Plugin %s tried to send message without msgtype."%self.plugin)
-            logger.debug("  msg: %s" % repr(msg))
-            return
-        msgtype = msg['msgtype']
-        if not self.msg_spec[msgtype]:
-            logger.error("Plugin %s tried to send message with unrecognized type %d" % (self.plugin, msgtype))
-            logger.debug("  msg: %s" % repr(msg))
-            return
-        try:
-            msgbytes = self.msg_spec[msgtype](msg)
-        except:
-            logger.error("Plugin %s sent invalid message of type %d" % (self.plugin, msgtype))
-            logger.debug("  msg: %s" % repr(msg))
-
-        #TODO: make use of asyncore interface to send this in non-blocking fashion.
-        self.sendall(MC_short(len(msgbytes)))
-        self.sendall(msgbytes)
-
-    def writable(self):
-        return False
 
 class PluginConfig(object):
     """Store plugin configuration"""
@@ -229,12 +122,25 @@ class PluginManager(object):
         # so they can be fed to plugins after initialization.
         self.__msgbuf = []
 
-        # For asynchronously injecting messages to the client or server.
-        self.__client_plugin_lstnr = PluginListener(cli_proxy, "client")
-        self.__server_plugin_lstnr = PluginListener(srv_proxy, "server")
+        # For asynchronously injecting messages from the client or server.
+        self.__from_client_q = multiprocessing.Queue()
+        self.__from_server_q = multiprocessing.Queue()
 
         # Plugin configuration.
         self.__config = config
+
+    def next_injected_msg_from(self, source):
+        """Return the Queue containing messages to be injected as if from source."""
+        if source == 'client':
+            q = self.__from_client_q
+        elif source == 'server':
+            q = self.__from_server_q
+        else:
+            raise Exception('Unrecognized source '+source)
+        try:
+            return q.get(block=False)
+        except Queue.Empty:
+            return None
 
     def _load_plugins(self):
         """Load or reload all plugins."""
@@ -287,17 +193,13 @@ class PluginManager(object):
         clazz = self._find_plugin_class(pname)
         if None == clazz:
             return
-        to_srv = PluginClient('client', id)
-        to_cli = PluginClient('server', id)
         try:
             logger.debug("  Instantiating plugin '%s' as '%s'" % (pname, id))
-            inst = clazz(to_cli, to_srv)
+            inst = clazz(self.__from_client_q, self.__from_server_q)
             inst.init(self.__config.argstr[id])
             self.__instances[id] = inst
         except Exception as e:
             logger.error("Failed to instantiate '%s': %s" % (id, str(e)))
-            to_cli.close()
-            to_srv.close()
 
     def destroy(self):
         """Destroy plugin instances."""
@@ -313,8 +215,6 @@ class PluginManager(object):
                                  (iname, self.__config.plugin[iname]))
                     logger.error(traceback.format_exc())
             self.__instances = {}
-        self.__client_plugin_lstnr.close()
-        self.__server_plugin_lstnr.close()
 
     def filter(self, msg, dst):
         """Filter msg through the configured plugins.
@@ -369,9 +269,9 @@ def msghdlr(*msgtypes):
 class MC3Plugin(object):
     """Base class for mc3p plugins."""
 
-    def __init__(self, to_client, to_server):
-        self.__to_client = to_client
-        self.__to_server = to_server
+    def __init__(self, from_client, from_server):
+        self.__to_client = from_server
+        self.__to_server = from_client
         self.__hdlrs = {}
         self._collect_msg_hdlrs()
 
@@ -410,13 +310,41 @@ class MC3Plugin(object):
         self.__to_server.close()
         self.destroy()
 
+    def __encode_msg(self, source, msg):
+        if source == 'client':
+            msg_spec = messages.cli_msgs
+        else:
+            msg_spec = messages.srv_msgs
+        if not msg.has_key('msgtype'):
+            logger.error("Plugin %s tried to send message without msgtype."%\
+                         self.plugin.__class__.__name__)
+            logger.debug("  msg: %s" % repr(msg))
+            return None
+        msgtype = msg['msgtype']
+        if not msg_spec[msgtype]:
+            logger.error("Plugin %s tried to send message with unrecognized type %d" %\
+                         (self.plugin.__class__.__name__, msgtype))
+            logger.debug("  msg: %s" % repr(msg))
+            return None
+        try:
+            msgbytes = msg_spec[msgtype](msg)
+        except:
+            logger.error("Plugin %s sent invalid message of type %d" % \
+                         (self.plugin__class__.__name__, msgtype))
+            logger.debug("  msg: %s" % repr(msg))
+        return msgbytes
+
     def to_server(self, msg):
         """Send msg to the server asynchronously."""
-        self.__to_server.inject_msg(msg)
+        msgbytes = self.__encode_msg('client', msg)
+        if msgbytes:
+            self.__to_server.put(msgbytes)
 
     def to_client(self, msg):
         """Send msg to the client asynchronously."""
-        self.__to_client.inject_msg(msg)
+        msgbytes = self.__encode_msg('server', msg)
+        if msgbytes:
+            self.__to_client.put(msgbytes)
 
     def default_handler(self, msg, dir):
         """Default message handler for all message types.

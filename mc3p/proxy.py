@@ -185,11 +185,13 @@ class MinecraftProxy(asyncore.dispatcher_with_send):
                 if forwarding and self.other_side:
                     self.other_side.send(packet['raw_bytes'])
                 # Since we know we're at a message boundary, we can inject
-                # any messages in the queue
-                if len(self.msg_queue) > 0 and self.other_side:
-                    for msgbytes in self.msg_queue:
-                        self.other_side.send(msgbytes)
-                    self.msg_queue = []
+                # any messages in the queue.
+                msgbytes = self.plugin_mgr.next_injected_msg_from(self.side)
+                while self.other_side and msgbytes is not None:
+                    self.other_side.send(msgbytes)
+                    msgbytes = self.plugin_mgr.next_injected_msg_from(self.side)
+
+                # Attempt to parse the next packet.
                 packet = parse_packet(self.stream,self.msg_spec, self.side)
         except PartialPacketException:
             pass # Not all data for the current packet is available.
@@ -211,9 +213,6 @@ class MinecraftProxy(asyncore.dispatcher_with_send):
             self.other_side = None
             logger.info("shutting down plugin manager")
             self.plugin_mgr.destroy()
-
-    def inject_msg(self, bytes):
-        self.msg_queue.append(bytes)
 
 
 class Message(dict):
