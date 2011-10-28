@@ -118,6 +118,9 @@ class PluginManager(object):
         # True when a successful client-server handshake has completed.
         self.__session_active = False
 
+        # Holds the protocol version number after successful handshake.
+        self.__proto_version = 0
+
         # Stores handshake messages before handshake has completed,
         # so they can be fed to plugins after initialization.
         self.__msgbuf = []
@@ -195,7 +198,9 @@ class PluginManager(object):
             return
         try:
             logger.debug("  Instantiating plugin '%s' as '%s'" % (pname, id))
-            inst = clazz(self.__from_client_q, self.__from_server_q)
+            inst = clazz(self.__proto_version,
+                         self.__from_client_q,
+                         self.__from_server_q)
             inst.init(self.__config.argstr[id])
             self.__instances[id] = inst
         except Exception as e:
@@ -230,11 +235,16 @@ class PluginManager(object):
                 self.__msgbuf = None
             return self._call_plugins(msg, source)
         else:
-            if 'server' == source and 0x01 == msg['msgtype']:
-                logger.info('Handshake completed, loading plugins')
-                self.__session_active = True
-                self._load_plugins()
-                self._instantiate_all()
+            if 0x01 == msg['msgtype']:
+                if 'client' == source:
+                    self.__proto_version = msg['proto_version']
+                    logger.debug('PluginManager detected proto version %d' %
+                                 self.__proto_version)
+                else:
+                    logger.info('Handshake completed, loading plugins')
+                    self.__session_active = True
+                    self._load_plugins()
+                    self._instantiate_all()
             self.__msgbuf.append( (msg, source) )
             return True
 
@@ -269,7 +279,8 @@ def msghdlr(*msgtypes):
 class MC3Plugin(object):
     """Base class for mc3p plugins."""
 
-    def __init__(self, from_client, from_server):
+    def __init__(self, proto_version, from_client, from_server):
+        self.__proto_version = proto_version
         self.__to_client = from_server
         self.__to_server = from_client
         self.__hdlrs = {}
@@ -311,10 +322,9 @@ class MC3Plugin(object):
         self.destroy()
 
     def __encode_msg(self, source, msg):
-        if source == 'client':
-            msg_spec = messages.cli_msgs
-        else:
-            msg_spec = messages.srv_msgs
+        cli_msgs, srv_msgs = messages.protocol[self.__proto_version]
+        msg_spec = cli_msgs if source == 'client' else srv_msgs
+
         if not msg.has_key('msgtype'):
             logger.error("Plugin %s tried to send message without msgtype."%\
                          self.plugin.__class__.__name__)

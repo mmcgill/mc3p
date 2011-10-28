@@ -165,9 +165,11 @@ class TestPluginManager(unittest.TestCase):
         self.pmgr._instantiate_all()
         self.assertEqual(0, len(mockplugin.instances))
 
-    handshake_msg = {'msgtype':0x01, 'eid': 1, 'reserved': '',
-                     'map_seed': 42, 'server_mode': 0, 'dimension': 0,
-                     'difficulty': 2, 'world_height': 128, 'max_players': 16}
+    handshake_msg1 = {'msgtype':0x01, 'proto_version': 21, 'username': 'foo',
+                      'nu1': 0, 'nu2': 0, 'nu3': 0, 'nu4': 0, 'nu5': 0, 'nu6': 0}
+    handshake_msg2 = {'msgtype':0x01, 'eid': 1, 'reserved': '',
+                      'map_seed': 42, 'server_mode': 0, 'dimension': 0,
+                      'difficulty': 2, 'world_height': 128, 'max_players': 16}
 
     def testLoadingPluginInPackage(self):
         pkgname = os.path.basename(self.__class__.pkgdir)
@@ -185,7 +187,8 @@ class TestPluginManager(unittest.TestCase):
         self.pmgr = PluginManager(pcfg, self.cli_proxy, self.srv_proxy)
         self.assertEqual(0, len(mockplugin.instances))
 
-        self.pmgr.filter(self.__class__.handshake_msg, 'server')
+        self.pmgr.filter(self.__class__.handshake_msg1, 'client')
+        self.pmgr.filter(self.__class__.handshake_msg2, 'server')
         self.assertEqual(2, len(mockplugin.instances))
 
     def testMessageHandlerRegistration(self):
@@ -194,7 +197,7 @@ class TestPluginManager(unittest.TestCase):
             def hdlr1(self, msg, dir): pass
             @msghdlr(0x04)
             def hdlr2(self, msg, dir): pass
-        a = A(None, None)
+        a = A(21, None, None)
         hdlrs = getattr(a, '_MC3Plugin__hdlrs')
         for msgtype in (0x01, 0x02, 0x03, 0x04):
             self.assertTrue(msgtype in hdlrs)
@@ -205,7 +208,8 @@ class TestPluginManager(unittest.TestCase):
         mockplugin = self._write_and_load('mockplugin', MOCK_PLUGIN_CODE)
         pcfg = PluginConfig().add('mockplugin', 'p1').add('mockplugin', 'p2')
         self.pmgr = PluginManager(pcfg, self.cli_proxy, self.srv_proxy)
-        self.pmgr.filter(self.__class__.handshake_msg, 'server')
+        self.pmgr.filter(self.__class__.handshake_msg1, 'client')
+        self.pmgr.filter(self.__class__.handshake_msg2, 'server')
         p1 = mockplugin.instances[0]
         p2 = mockplugin.instances[1]
         msg = {'msgtype': 0x03, 'chat_msg': 'foo!'}
