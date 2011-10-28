@@ -15,7 +15,7 @@ installed, first follow the installation instructions on
 
 With setuptools installed, installing mc3p is as simple as:
 
-    $ easy_install http://mattmcgill.com/mc3p/mc3p-0.1pre-py2.7.egg
+    $ easy_install http://mattmcgill.com/mc3p/mc3p-0.2pre-py2.7.egg
 
 Note that, depending on your system configuration, you may have to run
 the command with root privileges.
