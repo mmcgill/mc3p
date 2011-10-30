@@ -15,8 +15,16 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
-import re, asyncore, os, socket, logging, traceback, imp, inspect
-import multiprocessing, Queue
+import re
+import asyncore
+import os
+import socket
+import logging
+import traceback
+import imp
+import inspect
+import multiprocessing
+import Queue
 import messages
 from util import Stream, PartialPacketException
 from parsing import *
@@ -25,28 +33,32 @@ from parsing import *
 
 logger = logging.getLogger(__name__)
 
+
 ### Exceptions ###
 class ConfigError(Exception):
-    def __init__(self,msg):
+    def __init__(self, msg):
         Exception.__init__(self)
         self.msg = msg
+
     def __str__(self):
         return self.msg
 
+
 class PluginError(Exception):
-    def __init__(self,msg):
+    def __init__(self, msg):
         self.msg = msg
 
     def __str__(self):
         return self.msg
+
 
 class PluginConfig(object):
     """Store plugin configuration"""
     def __init__(self):
         self.__ids = []
-        self.__plugin_names = {} # { id -> plugin_name }
-        self.__argstrs = {} # { id -> argstr }
-        self.__orderings = {} # { msgtype -> [id1, id2, ...] }
+        self.__plugin_names = {}  # { id -> plugin_name }
+        self.__argstrs = {}       # { id -> argstr }
+        self.__orderings = {}     # { msgtype -> [id1, id2, ...] }
 
     def __default_id(self, plugin_name):
         id = plugin_name
@@ -106,6 +118,7 @@ class PluginConfig(object):
                     o.append(id)
             return o
 
+
 class PluginManager(object):
     """Manage plugins for an mc3p session."""
     def __init__(self, config, cli_proxy, srv_proxy):
@@ -133,13 +146,13 @@ class PluginManager(object):
         self.__config = config
 
     def next_injected_msg_from(self, source):
-        """Return the Queue containing messages to be injected as if from source."""
+        """Return the Queue containing source's messages to be injected."""
         if source == 'client':
             q = self.__from_client_q
         elif source == 'server':
             q = self.__from_server_q
         else:
-            raise Exception('Unrecognized source '+source)
+            raise Exception('Unrecognized source ' + source)
         try:
             return q.get(block=False)
         except Queue.Empty:
@@ -174,7 +187,7 @@ class PluginManager(object):
             if not pname in self.__plugins:
                 continue
             else:
-                self._instantiate_one(id,pname)
+                self._instantiate_one(id, pname)
 
     def _find_plugin_class(self, pname):
         """Return the subclass of MC3Plugin in pmod."""
@@ -183,10 +196,12 @@ class PluginManager(object):
             c != MC3Plugin and isinstance(c, type) and issubclass(c, MC3Plugin)
         classes = filter(class_check, pmod.__dict__.values())
         if len(classes) == 0:
-            logger.error("Plugin '%s' does not contain a subclass of MC3Plugin" % pname)
+            logger.error("Plugin '%s' does not contain " % pname + \
+                         "a subclass of MC3Plugin")
             return None
         elif len(classes) > 1:
-            logger.error("Plugin '%s' contains multiple subclasses of MC3Plugin: %s" % \
+            logger.error(("Plugin '%s' contains multiple subclasses " + \
+                          "of MC3Plugin: %s") % \
                          (pname, ', '.join([c.__name__ for c in classes])))
         else:
             return classes[0]
@@ -216,7 +231,8 @@ class PluginManager(object):
                 try:
                     self.__instances[iname]._destroy()
                 except:
-                    logger.error("Error cleaning up instance '%s' of plugin '%s'" % \
+                    logger.error(("Error cleaning up instance " + \
+                                  "'%s' of plugin '%s'") % \
                                  (iname, self.__config.plugin[iname]))
                     logger.error(traceback.format_exc())
             self.__instances = {}
@@ -228,8 +244,9 @@ class PluginManager(object):
         """
         if self.__session_active:
             if self.__msgbuf:
-                # Re-play handshake messages to the plugins, ignoring return values
-                # since the messages have already been sent and so cannot be filtered.
+                # Re-play handshake messages to the plugins,
+                # ignoring return values since the messages have
+                # already been sent and so cannot be filtered.
                 for (_msg, _source) in self.__msgbuf:
                     self._call_plugins(_msg, _source)
                 self.__msgbuf = None
@@ -245,7 +262,7 @@ class PluginManager(object):
                     self.__session_active = True
                     self._load_plugins()
                     self._instantiate_all()
-            self.__msgbuf.append( (msg, source) )
+            self.__msgbuf.append((msg, source))
             return True
 
     def _call_plugins(self, msg, source):
@@ -259,6 +276,7 @@ class PluginManager(object):
     def __repr__(self):
         return '<PluginManager>'
 
+
 class MsgHandlerWrapper(object):
     def __init__(self, msgtypes, method):
         for msgtype in msgtypes:
@@ -271,10 +289,12 @@ class MsgHandlerWrapper(object):
     def __call__(*args, **kargs):
         self.method(*args, **kargs)
 
+
 def msghdlr(*msgtypes):
     def wrapper(f):
         return MsgHandlerWrapper(msgtypes, f)
     return wrapper
+
 
 class MC3Plugin(object):
     """Base class for mc3p plugins."""
@@ -302,17 +322,15 @@ class MC3Plugin(object):
                                   (msgtype, othername, name))
             else:
                 self.__hdlrs[msgtype] = hdlr
-                logger.debug('  registered handler %s for %x' % (name, msgtype))
-
+                logger.debug('  registered handler %s for %x' \
+                             % (name, msgtype))
 
     def init(self, args):
         """Initialize plugin instance.
-
         Override to provide subclass-specific initialization."""
 
     def destroy(self):
         """Free plugin resources.
-
         Override in subclass."""
 
     def _destroy(self):
@@ -325,14 +343,15 @@ class MC3Plugin(object):
         cli_msgs, srv_msgs = messages.protocol[self.__proto_version]
         msg_spec = cli_msgs if source == 'client' else srv_msgs
 
-        if not msg.has_key('msgtype'):
-            logger.error("Plugin %s tried to send message without msgtype."%\
+        if 'msgtype' not in msg:
+            logger.error("Plugin %s tried to send message without msgtype." %\
                          self.plugin.__class__.__name__)
             logger.debug("  msg: %s" % repr(msg))
             return None
         msgtype = msg['msgtype']
         if not msg_spec[msgtype]:
-            logger.error("Plugin %s tried to send message with unrecognized type %d" %\
+            logger.error(("Plugin %s tried to send message with " +\
+                          "unrecognized type %d") %\
                          (self.plugin.__class__.__name__, msgtype))
             logger.debug("  msg: %s" % repr(msg))
             return None
@@ -385,7 +404,6 @@ class MC3Plugin(object):
         except:
             hdlr = self.__hdlrs[msgtype]
             logger.error('Error in handler %s of plugin %s: %s' % \
-                         (hdlr.__name__, self.__class__.__name__, traceback.format_exc()))
+                         (hdlr.__name__, self.__class__.__name__,
+                          traceback.format_exc()))
             return True
-
-
