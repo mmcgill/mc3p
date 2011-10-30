@@ -60,6 +60,12 @@ and forward that connection to <host>:<port>."""
 
     host = args[0]
     port = 25565
+    if len(args) > 1:
+        try:
+            port = int(args[1])
+        except ValueError:
+            parser.error("Invalid port %s" % args[1])
+
     pcfg = PluginConfig()
     pregex = re.compile('((?P<id>\\w+):)?(?P<plugin_name>[\\w\\.\\d_]+)(\\((?P<argstr>.*)\\))?$')
     for pstr in opts.plugins:
