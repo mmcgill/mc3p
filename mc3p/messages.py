@@ -501,3 +501,7 @@ srv_msgs[0x6b] = defmsg(0x6b, "Creative inventory action", [
     ('slot', MC_short),
     ('details', MC_slot_update2)])
 
+### Version 22 - Beta 1.9pre6 (no changes)
+
+protocol[22] = tuple(map(list, protocol[21]))
+cli_msgs, srv_msgs = protocol[22]
