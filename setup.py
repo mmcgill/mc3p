@@ -20,7 +20,7 @@ from sys import version_info
 from setuptools import setup, find_packages
 
 basename = "mc3p"
-version = "0.2pre"
+version = "0.3"
 pyversion = "%s.%s" % (version_info.major, version_info.minor)
 
 setup(
