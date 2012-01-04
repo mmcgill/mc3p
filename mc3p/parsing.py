@@ -80,10 +80,10 @@ def emit_int(i):
 MC_int = Parsem(parse_int, emit_int)
 
 def parse_long(stream):
-    return struct.unpack_from(">l",stream.read(8))[0]
+    return struct.unpack_from(">q",stream.read(8))[0]
 
 def emit_long(l):
-    return struct.pack(">l",l)
+    return struct.pack(">q",l)
 
 MC_long = Parsem(parse_long, emit_long)
 
