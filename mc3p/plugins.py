@@ -26,6 +26,8 @@ import inspect
 import multiprocessing
 import Queue
 import messages
+import traceback
+
 from util import Stream, PartialPacketException
 from parsing import *
 
@@ -356,12 +358,13 @@ class MC3Plugin(object):
             logger.debug("  msg: %s" % repr(msg))
             return None
         try:
-            msgbytes = msg_spec[msgtype](msg)
+            msgbytes = msg_spec[msgtype].emit(msg)
         except:
-            #Todo: Make this output stacktrace
+            traceback.print_exc()
             logger.error("Plugin %s sent invalid message of type %d" % \
                          (self.__class__.__name__, msgtype))
             logger.debug("  msg: %s" % repr(msg))
+            return None
         return msgbytes
 
     def to_server(self, msg):

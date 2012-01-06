@@ -214,7 +214,7 @@ srv_msgs[0x18] = defmsg(0x18, "Mob spawn", [
     ('z',MC_int),
     ('yaw',MC_byte),
     ('pitch',MC_byte),
-    ('metadata',parse_metadata)])
+    ('metadata',MC_metadata)])
 
 srv_msgs[0x19] = defmsg(0x19, "Painting", [
     ('eid', MC_int),
@@ -292,7 +292,7 @@ srv_msgs[0x27] = defmsg(0x27, "Attach entity", [
 cli_msgs[0x28] = \
 srv_msgs[0x28] = defmsg(0x28, "Entity metadata", [
     ('eid',MC_int),
-    ('metadata',parse_metadata)])
+    ('metadata',MC_metadata)])
 
 cli_msgs[0x29] = \
 srv_msgs[0x29] = defmsg(0x29, "Entity Effect", [

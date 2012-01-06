@@ -26,14 +26,6 @@ class Parsem(object):
         setattr(self,'parse',parser)
         setattr(self,'emit',emitter)
 
-    def __call__(self,arg):
-        try:
-            # Fast path: assume we're parsing.
-            return self.parse(arg)
-        except AttributeError:
-            # Parsing didn't work, we must be emitting.
-            return self.emit(arg)
-
 def parse_byte(stream):
     return struct.unpack_from(">b",stream.read(1))[0]
 
@@ -46,11 +38,11 @@ def defmsg(msgtype, name, pairs):
     def parse(stream):
         msg = {'msgtype': msgtype}
         for (name,parsem) in pairs:
-            msg[name] = parsem(stream)
+            msg[name] = parsem.parse(stream)
         return msg
     def emit(msg):
         return ''.join([emit_unsigned_byte(msgtype),
-                        ''.join([parsem(msg[name]) for (name,parsem) in pairs])])
+                        ''.join([parsem.emit(msg[name]) for (name,parsem) in pairs])])
     return Parsem(parse,emit)
 
 MC_byte = Parsem(parse_byte,emit_byte)
@@ -164,6 +156,8 @@ def parse_metadata(stream):
             raise Exception("Unknown metadata type %d" % type)
         type = parse_byte(stream)
     return data
+
+MC_metadata = Parsem(parse_metadata,None) #Todo! Make a metadata emit!
 
 def parse_inventory(stream):
     n = parse_short(stream)
