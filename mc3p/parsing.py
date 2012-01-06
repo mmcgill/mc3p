@@ -253,7 +253,7 @@ def parse_chunk(stream):
     return { 'size': n, 'data': stream.read(n) }
 
 def emit_chunk(ch):
-    return ''.join([emit_int(ch['size']), emit_string(ch['data'])])
+    return ''.join([emit_int(ch['size']), ch['data']])
 
 MC_chunk = Parsem(parse_chunk, emit_chunk)
 
