@@ -345,21 +345,22 @@ class MC3Plugin(object):
 
         if 'msgtype' not in msg:
             logger.error("Plugin %s tried to send message without msgtype." %\
-                         self.plugin.__class__.__name__)
+                         self.__class__.__name__)
             logger.debug("  msg: %s" % repr(msg))
             return None
         msgtype = msg['msgtype']
         if not msg_spec[msgtype]:
             logger.error(("Plugin %s tried to send message with " +\
                           "unrecognized type %d") %\
-                         (self.plugin.__class__.__name__, msgtype))
+                         (self.__class__.__name__, msgtype))
             logger.debug("  msg: %s" % repr(msg))
             return None
         try:
             msgbytes = msg_spec[msgtype](msg)
         except:
+            #Todo: Make this output stacktrace
             logger.error("Plugin %s sent invalid message of type %d" % \
-                         (self.plugin__class__.__name__, msgtype))
+                         (self.__class__.__name__, msgtype))
             logger.debug("  msg: %s" % repr(msg))
         return msgbytes
 
