@@ -165,6 +165,11 @@ def parse_metadata(stream):
         type = parse_byte(stream)
     return data
 
+def emit_metadata(md):
+    raise NotImplementedError
+
+MC_metadata = Parsem(parse_metadata, emit_metadata)
+
 def parse_inventory(stream):
     n = parse_short(stream)
     inv = { "count": n }
