@@ -187,7 +187,7 @@ class MinecraftProxy(asyncore.dispatcher_with_send):
                 if self.plugin_mgr:
                     forwarding = self.plugin_mgr.filter(packet, self.side)
                     if forwarding and packet.modified:
-                        packet['raw_bytes'] = self.msg_spec[packet['msgtype']](packet)
+                        packet['raw_bytes'] = self.msg_spec[packet['msgtype']].parse(packet)
                 if forwarding and self.other_side:
                     self.other_side.send(packet['raw_bytes'])
                 # Since we know we're at a message boundary, we can inject
@@ -239,7 +239,7 @@ def parse_packet(stream, msg_spec, side):
         raise UnsupportedPacketException(msgtype)
     logger.debug("%s trying to parse message type %x" % (side, msgtype))
     msg_parser = msg_spec[msgtype]
-    msg = msg_parser(stream)
+    msg = msg_parser.parse(stream)
     msg['raw_bytes'] = stream.packet_finished()
     return Message(msg)
 
