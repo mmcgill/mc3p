@@ -360,7 +360,9 @@ class MC3Plugin(object):
         except:
             logger.error("Plugin %s sent invalid message of type %d" % \
                          (self.plugin__class__.__name__, msgtype))
+            logger.info(traceback.format_exc())
             logger.debug("  msg: %s" % repr(msg))
+            return None
         return msgbytes
 
     def to_server(self, msg):
