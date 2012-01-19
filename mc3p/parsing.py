@@ -15,7 +15,7 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
-import struct, logging, inspect
+import sys, struct, logging, inspect
 
 logger = logging.getLogger('parsing')
 
@@ -33,6 +33,16 @@ def emit_byte(b):
     return struct.pack(">b",b)
 
 
+def with_defaults(tuple):
+    if len(tuple) == 2:
+        x,y = tuple
+        return x,y,0,sys.maxint
+    elif len(tuple) == 3:
+        x,y,z = tuple
+        return x,y,z,sys.maxint
+    else:
+        return tuple
+
 def defmsg(msgtype, name, pairs):
     """Build a Parsem for a message out of (name,Parsem) pairs."""
     def parse(stream):
@@ -44,6 +54,31 @@ def defmsg(msgtype, name, pairs):
         return ''.join([emit_unsigned_byte(msgtype),
                         ''.join([parsem.emit(msg[name]) for (name,parsem) in pairs])])
     return Parsem(parse,emit)
+
+def defloginmsg(tuples):
+    """One-off used to define login message.
+       The login message must be parsed before we know which protocol
+       version is in use, but its format differs across protocol versions.
+       We build a Parsem out of (name,min_version,max_version,Parsem) quads.
+       We assume the first field of the message is an int containing the
+       protocol version. For the remaining fields, min_version and max_version
+       (inclusive) define the range of versions in which the field is present.
+       """
+    def parse(stream):
+        msg = {'msgtype': 0x01}
+        proto_version = parse_int(stream)
+        msg['proto_version'] = proto_version
+        for (name,parsem,min,max) in map(with_defaults, tuples):
+            if min <= proto_version <= max:
+                msg[name] = parsem.parse(stream)
+        return msg
+    def emit(msg):
+        proto_version = msg['proto_version']
+        pairs = ((name,parsem) for (name,parsem,x,y) in map(with_defaults, tuples)
+                               if x <= proto_version <= y)
+        return ''.join([emit_unsigned_byte(0x01),
+                        ''.join([parsem.emit(msg[name]) for (name,parsem) in pairs])])
+    return Parsem(parse, emit)
 
 MC_byte = Parsem(parse_byte,emit_byte)
 

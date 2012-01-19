@@ -24,24 +24,15 @@ protocol = {}
 protocol[0] = [None] * 256, [None] * 256
 cli_msgs, srv_msgs = protocol[0]
 
-cli_msgs[0x01] = defmsg(0x01,"Login Request",[
-    ('proto_version',MC_int),
+cli_msgs[0x01] = defloginmsg([
     ('username',MC_string),
     ('nu1',MC_long),
+    ('nu7', MC_string, 23),
     ('nu2', MC_int),
     ('nu3', MC_byte),
     ('nu4', MC_byte),
     ('nu5', MC_unsigned_byte),
     ('nu6', MC_unsigned_byte)])
-srv_msgs[0x01] = defmsg(0x01,"Login Response",[
-    ('eid',MC_int),
-    ('reserved',MC_string),
-    ('map_seed',MC_long),
-    ('server_mode', MC_int),
-    ('dimension', MC_byte),
-    ('difficulty', MC_byte),
-    ('world_height', MC_unsigned_byte),
-    ('max_players', MC_unsigned_byte)])
 
 cli_msgs[0x02] = defmsg(0x02,"Handshake",[
     ('username',MC_string)])
@@ -58,6 +49,17 @@ srv_msgs[0xff] = defmsg(0xff, "Disconnect/Kick", [
 
 protocol[17] = tuple(map(list, protocol[0]))
 cli_msgs, srv_msgs = protocol[17]
+
+srv_msgs[0x01] = defmsg(0x01, "Login packet", [
+    ('eid',MC_int),
+    ('reserved',MC_string),
+    ('map_seed',MC_long),
+    ('level_type', MC_string, 23),
+    ('server_mode', MC_int),
+    ('dimension', MC_byte),
+    ('difficulty', MC_byte),
+    ('world_height', MC_unsigned_byte),
+    ('max_players', MC_unsigned_byte)])
 
 cli_msgs[0x00] = \
 srv_msgs[0x00] = defmsg(0x00,"Keep Alive",[
@@ -505,3 +507,36 @@ srv_msgs[0x6b] = defmsg(0x6b, "Creative inventory action", [
 
 protocol[22] = tuple(map(list, protocol[21]))
 cli_msgs, srv_msgs = protocol[22]
+
+## Version 23 - 1.1
+
+protocol[23] = tuple(map(list, protocol[22]))
+cli_msgs, srv_msgs = protocol[23]
+
+srv_msgs[0x01] = defmsg(0x01, "Login packet", [
+    ('eid',MC_int),
+    ('reserved',MC_string),
+    ('map_seed',MC_long),
+    ('level_type', MC_string),
+    ('server_mode', MC_int),
+    ('dimension', MC_byte),
+    ('difficulty', MC_byte),
+    ('world_height', MC_unsigned_byte),
+    ('max_players', MC_unsigned_byte)])
+
+cli_msgs[0xfa] = \
+srv_msgs[0xfa] = defmsg(0xfa, "Plugin message", [
+    ('channel', MC_string),
+    ('data', MC_string8)])
+
+cli_msgs[0x09] = \
+srv_msgs[0x09] = defmsg(0x09, "Respawn", [
+    ('world', MC_byte),
+    ('difficulty', MC_byte),
+    ('mode', MC_byte),
+    ('world_height', MC_short),
+    ('map_seed', MC_long),
+    ('level_type', MC_string)])
+
+cli_msgs[0x1b] = \
+srv_msgs[0x1b] = None
