@@ -77,6 +77,7 @@ def defloginmsg(tuples):
         pairs = ((name,parsem) for (name,parsem,x,y) in map(with_defaults, tuples)
                                if x <= proto_version <= y)
         return ''.join([emit_unsigned_byte(0x01),
+                        emit_int(msg['proto_version']),
                         ''.join([parsem.emit(msg[name]) for (name,parsem) in pairs])])
     return Parsem(parse, emit)
 
