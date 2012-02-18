@@ -300,7 +300,7 @@ cli_msgs[0x29] = \
 srv_msgs[0x29] = defmsg(0x29, "Entity Effect", [
     ('eid', MC_int),
     ('effect_id', MC_byte),
-    ('aplifier', MC_byte),
+    ('amplifier', MC_byte),
     ('duration', MC_short)])
 
 cli_msgs[0x2a] = \
