@@ -290,6 +290,16 @@ def emit_chunk(ch):
 
 MC_chunk = Parsem(parse_chunk, emit_chunk)
 
+def parse_chunk2(stream):
+    n = parse_int(stream)
+    parse_int(stream)
+    return { 'size': n, 'data': stream.read(n) }
+
+def emit_chunk2(ch):
+    return ''.join([emit_int(ch['size']), emit_int(0), ch['data']])
+
+MC_chunk2 = Parsem(parse_chunk2, emit_chunk2)
+
 def parse_multi_block_change(stream):
     n = parse_short(stream)
     return {'coord_array': [parse_short(stream) for j in xrange(0,n)],
@@ -303,6 +313,16 @@ def emit_multi_block_change(changes):
                     ''.join([emit_byte(x)  for x in changes['metadata_array']])])
 
 MC_multi_block_change = Parsem(parse_multi_block_change, emit_multi_block_change)
+
+def parse_multi_block_change2(stream):
+    n = parse_int(stream)/4
+    return [parse_int(stream) for i in range(n)]
+
+def emit_multi_block_change2(changes):
+    return ''.join([emit_int(len(changes)*4),
+           ''.join([emit_int(c) for c in changes])])
+
+MC_multi_block_change2 = Parsem(parse_multi_block_change2, emit_multi_block_change2)
 
 def parse_explosion_records(stream):
     n = parse_int(stream)
@@ -365,4 +385,3 @@ def emit_fireball_data(data):
     return str
 
 MC_fireball_data = Parsem(parse_fireball_data, emit_fireball_data)
-

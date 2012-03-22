@@ -78,12 +78,6 @@ and forward that connection to <host>:<port>."""
             parts.update(m.groupdict())
             pcfg.add(**parts)
 
-    if len(args) == 2:
-        try:
-            port = int(sys.argv[2])
-        except:
-            parser.error("Invalid port '%s'" % args[1])
-
     return (host, port, opts, pcfg)
 
 

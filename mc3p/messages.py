@@ -25,11 +25,12 @@ protocol[0] = [None] * 256, [None] * 256
 cli_msgs, srv_msgs = protocol[0]
 
 cli_msgs[0x01] = defloginmsg([
-    ('username',MC_string),
-    ('nu1',MC_long),
+    ('username', MC_string),
+    ('nu1', MC_long, 0, 23),
     ('nu7', MC_string, 23),
     ('nu2', MC_int),
-    ('nu3', MC_byte),
+    ('nu3', MC_byte, 0, 23),
+    ('nu8', MC_int, 28),
     ('nu4', MC_byte),
     ('nu5', MC_unsigned_byte),
     ('nu6', MC_unsigned_byte)])
@@ -540,3 +541,64 @@ srv_msgs[0x09] = defmsg(0x09, "Respawn", [
 
 cli_msgs[0x1b] = \
 srv_msgs[0x1b] = None
+
+## Version 28 - 1.2
+
+protocol[28] = tuple(map(list, protocol[23]))
+cli_msgs, srv_msgs = protocol[28]
+
+srv_msgs[0x01] = defmsg(0x01, "Login packet", [
+    ('eid', MC_int),
+    ('reserved', MC_string),
+    ('level_type', MC_string),
+    ('server_mode', MC_int),
+    ('dimension', MC_int),
+    ('difficulty', MC_byte),
+    ('world_height', MC_unsigned_byte),
+    ('max_players', MC_unsigned_byte)])
+
+cli_msgs[0x09] = \
+srv_msgs[0x09] = defmsg(0x09, "Respawn", [
+    ('world', MC_byte),
+    ('difficulty', MC_byte),
+    ('mode', MC_byte),
+    ('world_height', MC_short),
+    ('level_type', MC_string)])
+
+srv_msgs[0x18] = defmsg(0x18, "Mob spawn", [
+    ('eid',MC_int),
+    ('mob_type',MC_byte),
+    ('x',MC_int),
+    ('y',MC_int),
+    ('z',MC_int),
+    ('yaw',MC_byte),
+    ('pitch',MC_byte),
+    ('head_yaw',MC_byte),
+    ('metadata',MC_metadata)])
+
+srv_msgs[0x23] = defmsg(0x23, "Entity head look", [
+    ('eid',MC_int),
+    ('head_yaw',MC_byte)])
+
+srv_msgs[0x33] = defmsg(0x33, "Chunk", [
+    ('x',MC_int),
+    ('z',MC_int),
+    ('continuous',MC_bool),
+    ('chunk_bitmap',MC_short),
+    ('add_bitmap',MC_short),
+    ('chunk',MC_chunk2)])
+
+srv_msgs[0x34] = defmsg(0x34, "Multi-block change", [
+    ('chunk_x',MC_int),
+    ('chunk_z',MC_int),
+    ('block_count',MC_short),
+    ('changes',MC_multi_block_change2)])
+
+srv_msgs[0x84] = defmsg(0x84, "Update tile entity", [
+    ('x',MC_int),
+    ('y',MC_short),
+    ('z',MC_int),
+    ('action',MC_byte),
+    ('custom1',MC_int),
+    ('custom2',MC_int),
+    ('custom3',MC_int)])
