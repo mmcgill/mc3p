@@ -55,7 +55,6 @@ srv_msgs[0x01] = defmsg(0x01, "Login packet", [
     ('eid',MC_int),
     ('reserved',MC_string),
     ('map_seed',MC_long),
-    ('level_type', MC_string, 23),
     ('server_mode', MC_int),
     ('dimension', MC_byte),
     ('difficulty', MC_byte),
