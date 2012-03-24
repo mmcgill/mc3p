@@ -602,3 +602,15 @@ srv_msgs[0x84] = defmsg(0x84, "Update tile entity", [
     ('custom1',MC_int),
     ('custom2',MC_int),
     ('custom3',MC_int)])
+
+## Version 29 - 1.2.4
+
+protocol[29] = tuple(map(list, protocol[28]))
+cli_msgs, srv_msgs = protocol[29]
+
+cli_msgs[0xca] = \
+srv_msgs[0xca] = defmsg(0xca, "Abilities", [
+    ('invulnerable', MC_bool),
+    ('flying', MC_bool),
+    ('allow_flying', MC_bool),
+    ('instant_destroy', MC_bool)])
