@@ -22,7 +22,8 @@ logger = logging.getLogger('parsing')
 class Parsem(object):
     """Parser/emitter."""
 
-    def __init__(self,parser,emitter):
+    def __init__(self,parser,emitter, name=None):
+        self.name = name
         setattr(self,'parse',parser)
         setattr(self,'emit',emitter)
 
@@ -53,7 +54,7 @@ def defmsg(msgtype, name, pairs):
     def emit(msg):
         return ''.join([emit_unsigned_byte(msgtype),
                         ''.join([parsem.emit(msg[name]) for (name,parsem) in pairs])])
-    return Parsem(parse,emit)
+    return Parsem(parse,emit,name)
 
 def defloginmsg(tuples):
     """One-off used to define login message.
