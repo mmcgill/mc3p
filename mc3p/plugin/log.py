@@ -16,16 +16,20 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
 
+# Message logging plugin, by fredreichbier
+
+
 from mc3p.plugins import MC3Plugin, msghdlr
 from mc3p.messages import cli_msgs, srv_msgs
 
 IGNORE = ['mgstype']
 SHORTEN = ['chunk', 'raw_bytes']
 
-class MutePlugin(MC3Plugin):
+class LogPlugin(MC3Plugin):
     def default_handler(self, msg, source):
         line = []
         msgs = srv_msgs # TODO
+
         if source == 'server':
             line.append('Server -> Client')
             msgs = srv_msgs
@@ -33,16 +37,14 @@ class MutePlugin(MC3Plugin):
             line.append('Client -> Server')
             msgs = cli_msgs
         else:
-            line.append('[%s]' % source)
+            line.append('from %s' % source)
+
         try:
             parsem = msgs[msg['msgtype']]
-        except ValueError:
-            parsem = None
-        name = None
-        if parsem is not None:
             name = parsem.name
-        if name is None:
+        except ValueError:
             name = 'Unknown'
+
         line.append('0x%.2x (%s)' % (msg['msgtype'], name))
         line.append('%d bytes' % len(msg['raw_bytes']))
         print ' '.join(line)
