@@ -225,6 +225,8 @@ def emit_slot_update(update):
 MC_slot_update = Parsem(parse_slot_update, emit_slot_update)
 
 SLOT_UPDATE_2_ITEM_IDS = set([
+    0x103, #Flint and steel
+    0x105, #Bow
     0x15A, #Fishing rod
     0x167, #Shears
 
